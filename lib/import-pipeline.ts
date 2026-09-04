@@ -8,6 +8,7 @@ export interface ImportSource {
   mimeType?: string;
   sourceReference?: string;
   rawText?: string;
+  base64Data?: string;
 }
 
 export interface TextExtractionResult {
@@ -79,10 +80,13 @@ export class VoucherImportPipeline {
 
 export function validateSource(source: ImportSource) {
   const allowedMime = new Set(['image/jpeg','image/png','image/webp','application/pdf','message/rfc822','text/plain']);
-  if (!source.rawText && !source.sourceReference) {
-    throw new Error('Quelle benötigt rawText oder sourceReference.');
+  if (!source.rawText && !source.sourceReference && !source.base64Data) {
+    throw new Error('Quelle benötigt Text, eine Datei oder eine Referenz.');
   }
   if (source.mimeType && !allowedMime.has(source.mimeType)) {
     throw new Error(`Nicht unterstützter Dateityp: ${source.mimeType}`);
+  }
+  if (source.base64Data && source.base64Data.length > 14_000_000) {
+    throw new Error('Datei ist zu groß. Maximal 10 MiB sind zulässig.');
   }
 }

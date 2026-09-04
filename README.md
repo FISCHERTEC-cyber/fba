@@ -12,7 +12,8 @@ MVP 0.5 for capturing vouchers/benefits, reviewing extracted data, locating phys
 - configurable HTTP document decoder via `OCR_PROVIDER_URL` / `OCR_PROVIDER_TOKEN`
 - binary decoder contract for OCR plus QR/barcode results
 - deterministic text structurer for development/fallback operation
-- import review UI at `/import`
+- import review UI at `/import` with editable fields, confidence confirmations and persistence
+- photo, screenshot and PDF upload flow with a 10 MiB client/server limit
 - merchant-event opportunity engine with expiry, value, distance and interest weighting
 - Schema.org `Event` JSON-LD parser with deduplication and category inference
 - event discovery API at `POST /api/opportunities/discover`
@@ -39,6 +40,8 @@ Required runtime configuration for binary recognition:
 
 Text-only imports remain usable without an OCR provider.
 
+Until authentication is connected, the reviewed-voucher UI uses the server-side `FBA_MVP_USER_ID` as its user context. The referenced user must already exist in PostgreSQL. API clients can alternatively send `x-fba-user-id`.
+
 ## Event discovery
 
 `parseStructuredEvents()` extracts Schema.org `Event` JSON-LD from merchant HTML, normalises it to `MerchantEvent`, deduplicates matching records and infers useful categories such as wild, poultry, music, wine, brunch, grill and asparagus.
@@ -64,7 +67,6 @@ New database deployments must apply the initial Prisma migration before enabling
 ## Next development steps
 
 1. select and connect the first production OCR/QR/barcode provider
-2. connect the import review UI to reviewed-voucher persistence
-3. notification scheduler for expiry and opportunity alerts
-4. email-forwarding ingestion
-5. calendar/location context and family wallet
+2. notification scheduler for expiry and opportunity alerts
+3. email-forwarding ingestion
+4. calendar/location context and family wallet
