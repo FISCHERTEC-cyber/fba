@@ -1,6 +1,7 @@
 :root { font-family: Arial, Helvetica, sans-serif; color: #111827; background: #f3f4f6; }
 * { box-sizing: border-box; }
 body { margin: 0; }
+a { color:#3730a3; }
 main { max-width: 1100px; margin: 0 auto; padding: 28px 20px 60px; }
 h1,h2 { margin: 0 0 12px; }
 .grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap: 16px; }
@@ -34,9 +35,30 @@ label { display:block; margin:10px 0 6px; font-size:14px; font-weight:600; }
 .review-box { padding:14px; border:1px solid #fde68a; border-radius:10px; background:#fffbeb; display:grid; gap:12px; }
 .review-box h3 { margin:0; }
 .block { display:block; margin-top:2px; font-weight:400; }
+.page-header { display:flex; justify-content:space-between; align-items:flex-start; gap:18px; }
+.page-header h1 { margin-top:6px; }
+.header-action { flex-shrink:0; margin-top:6px; }
+.button-secondary { background:#eef2ff; color:#312e81; }
+.button-quiet { background:#f3f4f6; color:#374151; }
+.notification-list { display:grid; gap:12px; margin-top:20px; }
+.notification-card { display:grid; grid-template-columns:auto minmax(0,1fr) auto; gap:14px; align-items:start; }
+.notification-card-unread { border-color:#a5b4fc; box-shadow:inset 4px 0 #6366f1; }
+.notification-marker { width:10px; height:10px; margin-top:6px; border-radius:999px; background:#6366f1; }
+.notification-marker-read { background:#d1d5db; }
+.notification-content h2 { margin:0 0 6px; font-size:18px; }
+.notification-content p { margin:0; line-height:1.5; }
+.notification-meta { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; color:#6b7280; font-size:14px; }
+.notification-actions { display:flex; gap:8px; }
+.empty-state { text-align:center; padding:42px 20px; }
+.empty-state h2 { margin-bottom:8px; }
+.empty-state p { margin:0; }
 
 @media (max-width: 680px) {
   .form-grid { grid-template-columns:1fr; }
   .full-width { grid-column:auto; }
   .row { flex-direction:column; }
+  .page-header { flex-direction:column; }
+  .header-action { margin-top:0; }
+  .notification-card { grid-template-columns:auto minmax(0,1fr); }
+  .notification-actions { grid-column:2; flex-wrap:wrap; }
 }

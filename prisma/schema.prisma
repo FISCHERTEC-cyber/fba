@@ -32,11 +32,29 @@ enum SourceType {
   WALLET
 }
 
+enum NotificationKind {
+  EXPIRY
+  OPPORTUNITY
+}
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+  PUSH
+}
+
+enum NotificationDeliveryStatus {
+  PENDING
+  DELIVERED
+  FAILED
+}
+
 model User {
   id              String           @id @default(cuid())
   email           String           @unique
   vouchers        Voucher[]
   merchantSources MerchantSource[]
+  notifications   Notification[]
   createdAt       DateTime         @default(now())
 }
 
@@ -70,6 +88,7 @@ model Voucher {
   sourceReference         String?
   opportunities           Opportunity[]
   transactions            VoucherTransaction[]
+  notifications           Notification[]
   createdAt               DateTime             @default(now())
   updatedAt               DateTime             @updatedAt
 }
@@ -146,8 +165,34 @@ model MerchantEvent {
   lastChangedAt   DateTime
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
+  notifications   Notification[]
 
   @@unique([sourceId, externalKey])
   @@index([sourceId, active])
   @@index([endsAt])
+}
+
+model Notification {
+  id              String                     @id @default(cuid())
+  userId          String
+  user            User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  voucherId       String?
+  voucher         Voucher?                   @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  merchantEventId String?
+  merchantEvent   MerchantEvent?             @relation(fields: [merchantEventId], references: [id], onDelete: Cascade)
+  kind            NotificationKind
+  channel         NotificationChannel        @default(IN_APP)
+  deliveryStatus  NotificationDeliveryStatus @default(DELIVERED)
+  dedupeKey       String                     @unique
+  title           String
+  body            String
+  payload         Json?
+  deliveredAt     DateTime?
+  readAt          DateTime?
+  dismissedAt     DateTime?
+  createdAt       DateTime                   @default(now())
+  updatedAt       DateTime                   @updatedAt
+
+  @@index([userId, dismissedAt, readAt])
+  @@index([deliveryStatus, createdAt])
 }

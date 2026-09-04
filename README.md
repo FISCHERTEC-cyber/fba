@@ -1,6 +1,6 @@
 # FISCHERTEC Benefit Agent (FBA)
 
-MVP 0.5 for capturing vouchers/benefits, reviewing extracted data, locating physical originals and automatically matching benefits with relevant merchant events.
+MVP 0.6 for capturing vouchers/benefits, reviewing extracted data, locating physical originals, matching benefits with relevant merchant events and delivering actionable reminders.
 
 ## Implemented
 
@@ -26,7 +26,10 @@ MVP 0.5 for capturing vouchers/benefits, reviewing extracted data, locating phys
 - stored opportunity API at `GET /api/opportunities`
 - opportunity UI at `/opportunities`
 - API routes for import analysis, reviewed voucher persistence, merchant sources and opportunity queries
-- reminder and redemption-score foundations
+- persistent, deduplicated in-app notifications for voucher expiry and relevant merchant events
+- calendar-day expiry reminders at 30, 14, 7, 2 and 0 days in `Europe/Berlin`
+- protected notification scheduler at `POST /api/jobs/notifications`
+- notification inbox at `/notifications` with read and dismiss actions
 - GitHub Actions CI for tests and production build
 
 ## Import provider contract
@@ -64,9 +67,25 @@ The job selects due, enabled sources across users, processes at most 50 sources 
 
 New database deployments must apply the initial Prisma migration before enabling the scan job.
 
+## Scheduled notifications
+
+Set a separate long random `NOTIFICATION_JOB_TOKEN`, then invoke the notification job daily with:
+
+```http
+POST /api/jobs/notifications
+Authorization: Bearer <NOTIFICATION_JOB_TOKEN>
+Content-Type: application/json
+
+{"timeZone":"Europe/Berlin","minimumOpportunityScore":50}
+```
+
+The job creates expiry reminders exactly 30, 14, 7, 2 and 0 local calendar days before expiration. Opportunity alerts are created for active, monitored vouchers when a merchant event reaches the configured score. Repeated job runs are safe because every notification has a stable deduplication key.
+
+Apply all Prisma migrations before enabling the job. Users can view, mark as read and dismiss their in-app notifications at `/notifications` or through `GET` and `PATCH /api/notifications`.
+
 ## Next development steps
 
 1. select and connect the first production OCR/QR/barcode provider
-2. notification scheduler for expiry and opportunity alerts
+2. email and push delivery adapters for the existing notification queue
 3. email-forwarding ingestion
-4. calendar/location context and family wallet
+4. authentication plus calendar/location context and family wallet
