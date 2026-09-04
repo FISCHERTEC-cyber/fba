@@ -1,0 +1,73 @@
+generator client { provider = "prisma-client-js" }
+datasource db { provider = "postgresql" url = env("DATABASE_URL") }
+
+enum VoucherKind { VALUE DISCOUNT SERVICE CASHBACK STORE_CREDIT LOYALTY }
+enum VoucherStatus { ACTIVE REDEEMED EXPIRED ARCHIVED }
+enum SourceType { PHOTO PDF SCREENSHOT EMAIL MANUAL WALLET }
+
+model User {
+  id String @id @default(cuid())
+  email String @unique
+  vouchers Voucher[]
+  createdAt DateTime @default(now())
+}
+
+model Voucher {
+  id String @id @default(cuid())
+  userId String
+  user User @relation(fields:[userId], references:[id], onDelete:Cascade)
+  merchantName String
+  merchantUrl String?
+  title String
+  kind VoucherKind
+  valueAmount Decimal? @db.Decimal(12,2)
+  currency String? @default("EUR")
+  discountPercent Decimal? @db.Decimal(5,2)
+  code String?
+  barcode String?
+  qrPayload String?
+  validFrom DateTime?
+  validUntil DateTime?
+  minimumOrderValue Decimal? @db.Decimal(12,2)
+  redemptionUrl String?
+  terms String?
+  physicalVoucher Boolean @default(false)
+  storageLocation String?
+  storageLocationPhotoUrl String?
+  lastLocationUpdate DateTime?
+  status VoucherStatus @default(ACTIVE)
+  eventMonitoringEnabled Boolean @default(false)
+  extractionConfidence Float?
+  sourceType SourceType @default(MANUAL)
+  sourceReference String?
+  opportunities Opportunity[]
+  transactions VoucherTransaction[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model VoucherTransaction {
+  id String @id @default(cuid())
+  voucherId String
+  voucher Voucher @relation(fields:[voucherId], references:[id], onDelete:Cascade)
+  amount Decimal? @db.Decimal(12,2)
+  note String?
+  receiptUrl String?
+  createdAt DateTime @default(now())
+}
+
+model Opportunity {
+  id String @id @default(cuid())
+  voucherId String
+  voucher Voucher @relation(fields:[voucherId], references:[id], onDelete:Cascade)
+  title String
+  startsAt DateTime?
+  endsAt DateTime?
+  sourceUrl String?
+  sourceCheckedAt DateTime?
+  distanceKm Float?
+  relevanceScore Int @default(0)
+  reasonJson Json?
+  dismissedAt DateTime?
+  createdAt DateTime @default(now())
+}
