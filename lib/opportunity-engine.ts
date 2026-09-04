@@ -40,13 +40,15 @@ export function buildOpportunities(
         ? Math.ceil((new Date(voucher.validUntil).getTime() - now.getTime()) / 86400000)
         : undefined;
       const eventMatch = categoryMatch(event.categories ?? [], context.preferredCategories ?? []);
-      const score = redemptionScore({
-        daysToExpiry,
-        valueAmount: voucher.valueAmount,
-        matchingEvent: true,
-        distanceKm: event.distanceKm,
-        preferredEvent: eventMatch
-      });
+      const draftOpportunity: Partial<Opportunity> = {
+        title: event.title,
+        startsAt: event.startsAt,
+        endsAt: event.endsAt,
+        sourceUrl: event.sourceUrl,
+        distanceKm: event.distanceKm
+      };
+      const baseScore = redemptionScore(voucher, draftOpportunity, now);
+      const score = Math.min(100, baseScore + (eventMatch ? 10 : 0));
 
       const reason = [`Passendes Event bei ${voucher.merchantName}`];
       if (daysToExpiry != null && daysToExpiry <= 30) reason.push(`Gutschein läuft in ${Math.max(daysToExpiry, 0)} Tagen ab`);
