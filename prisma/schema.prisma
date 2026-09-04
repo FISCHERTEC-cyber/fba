@@ -9,6 +9,7 @@ model User {
   id String @id @default(cuid())
   email String @unique
   vouchers Voucher[]
+  merchantSources MerchantSource[]
   createdAt DateTime @default(now())
 }
 
@@ -70,4 +71,25 @@ model Opportunity {
   reasonJson Json?
   dismissedAt DateTime?
   createdAt DateTime @default(now())
+}
+
+model MerchantSource {
+  id String @id @default(cuid())
+  userId String
+  user User @relation(fields:[userId], references:[id], onDelete:Cascade)
+  merchantName String
+  url String
+  enabled Boolean @default(true)
+  checkIntervalHours Int @default(24)
+  lastCheckedAt DateTime?
+  lastSuccessAt DateTime?
+  etag String?
+  lastModified String?
+  failureCount Int @default(0)
+  lastError String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, url])
+  @@index([userId, enabled])
 }
