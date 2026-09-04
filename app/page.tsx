@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { vouchers, opportunities } from '@/lib/demo';
 
 export default function Home() {
@@ -5,7 +6,7 @@ export default function Home() {
   const total = active.reduce((s,v) => s + (v.valueAmount ?? 0), 0);
   const physical = active.filter(v => v.physicalVoucher).length;
   return <main>
-    <p className="badge">MVP 0.2</p>
+    <p className="badge">MVP 0.3</p>
     <h1>FISCHERTEC Benefit Agent</h1>
     <p className="muted">Vorhandene Gutscheine, Guthaben und Vorteile erkennen, wiederfinden und sinnvoll einsetzen.</p>
 
@@ -14,6 +15,11 @@ export default function Home() {
       <div className="card"><div className="muted">Aktive Vorteile</div><div className="metric">{active.length}</div></div>
       <div className="card"><div className="muted">Physische Originale</div><div className="metric">{physical}</div></div>
       <div className="card"><div className="muted">Nutzungschancen</div><div className="metric">{opportunities.length}</div></div>
+    </section>
+
+    <section className="grid" style={{marginTop:20}}>
+      <Link className="card" href="/import"><strong>Gutschein erfassen</strong><div className="muted">Text analysieren, Felder erkennen und unsichere Werte prüfen.</div></Link>
+      <Link className="card" href="/opportunities"><strong>Nutzungschancen ansehen</strong><div className="muted">Events mit vorhandenen Gutscheinen abgleichen und priorisieren.</div></Link>
     </section>
 
     <section style={{marginTop:26}}>
