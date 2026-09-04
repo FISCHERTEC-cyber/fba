@@ -41,7 +41,7 @@ export default function ImportPage() {
   return <main>
     <p className="badge">Import & Prüfen</p>
     <h1>Gutschein erfassen</h1>
-    <p className="muted">MVP 0.3: Der Textfluss ist bereits nutzbar. Binärdateien werden im nächsten Provider-Schritt über OCR angebunden.</p>
+    <p className="muted">MVP 0.5: Textimporte sind direkt nutzbar. Fotos, Screenshots und PDF-Dateien werden verarbeitet, sobald ein OCR-Provider konfiguriert ist.</p>
 
     <section className="card" style={{marginTop:20}}>
       <label>Quelle</label>

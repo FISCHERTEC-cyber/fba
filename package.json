@@ -1,13 +1,14 @@
 {
   "name": "fischertec-benefit-agent",
   "version": "0.1.0",
+  "type": "module",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "node --test tests/*.test.mjs"
+    "test": "node --experimental-strip-types --test tests/*.test.mjs tests/*.test.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.7.0",

@@ -1,95 +1,153 @@
-generator client { provider = "prisma-client-js" }
-datasource db { provider = "postgresql" url = env("DATABASE_URL") }
+generator client {
+  provider = "prisma-client-js"
+}
 
-enum VoucherKind { VALUE DISCOUNT SERVICE CASHBACK STORE_CREDIT LOYALTY }
-enum VoucherStatus { ACTIVE REDEEMED EXPIRED ARCHIVED }
-enum SourceType { PHOTO PDF SCREENSHOT EMAIL MANUAL WALLET }
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum VoucherKind {
+  VALUE
+  DISCOUNT
+  SERVICE
+  CASHBACK
+  STORE_CREDIT
+  LOYALTY
+}
+
+enum VoucherStatus {
+  ACTIVE
+  REDEEMED
+  EXPIRED
+  ARCHIVED
+}
+
+enum SourceType {
+  PHOTO
+  PDF
+  SCREENSHOT
+  EMAIL
+  MANUAL
+  WALLET
+}
 
 model User {
-  id String @id @default(cuid())
-  email String @unique
-  vouchers Voucher[]
+  id              String           @id @default(cuid())
+  email           String           @unique
+  vouchers        Voucher[]
   merchantSources MerchantSource[]
-  createdAt DateTime @default(now())
+  createdAt       DateTime         @default(now())
 }
 
 model Voucher {
-  id String @id @default(cuid())
-  userId String
-  user User @relation(fields:[userId], references:[id], onDelete:Cascade)
-  merchantName String
-  merchantUrl String?
-  title String
-  kind VoucherKind
-  valueAmount Decimal? @db.Decimal(12,2)
-  currency String? @default("EUR")
-  discountPercent Decimal? @db.Decimal(5,2)
-  code String?
-  barcode String?
-  qrPayload String?
-  validFrom DateTime?
-  validUntil DateTime?
-  minimumOrderValue Decimal? @db.Decimal(12,2)
-  redemptionUrl String?
-  terms String?
-  physicalVoucher Boolean @default(false)
-  storageLocation String?
+  id                      String               @id @default(cuid())
+  userId                  String
+  user                    User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  merchantName            String
+  merchantUrl             String?
+  title                   String
+  kind                    VoucherKind
+  valueAmount             Decimal?             @db.Decimal(12, 2)
+  currency                String?              @default("EUR")
+  discountPercent         Decimal?             @db.Decimal(5, 2)
+  code                    String?
+  barcode                 String?
+  qrPayload               String?
+  validFrom               DateTime?
+  validUntil              DateTime?
+  minimumOrderValue       Decimal?             @db.Decimal(12, 2)
+  redemptionUrl           String?
+  terms                   String?
+  physicalVoucher         Boolean              @default(false)
+  storageLocation         String?
   storageLocationPhotoUrl String?
-  lastLocationUpdate DateTime?
-  status VoucherStatus @default(ACTIVE)
-  eventMonitoringEnabled Boolean @default(false)
-  extractionConfidence Float?
-  sourceType SourceType @default(MANUAL)
-  sourceReference String?
-  opportunities Opportunity[]
-  transactions VoucherTransaction[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  lastLocationUpdate      DateTime?
+  status                  VoucherStatus        @default(ACTIVE)
+  eventMonitoringEnabled  Boolean              @default(false)
+  extractionConfidence    Float?
+  sourceType              SourceType           @default(MANUAL)
+  sourceReference         String?
+  opportunities           Opportunity[]
+  transactions            VoucherTransaction[]
+  createdAt               DateTime             @default(now())
+  updatedAt               DateTime             @updatedAt
 }
 
 model VoucherTransaction {
-  id String @id @default(cuid())
-  voucherId String
-  voucher Voucher @relation(fields:[voucherId], references:[id], onDelete:Cascade)
-  amount Decimal? @db.Decimal(12,2)
-  note String?
+  id         String   @id @default(cuid())
+  voucherId  String
+  voucher    Voucher  @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  amount     Decimal? @db.Decimal(12, 2)
+  note       String?
   receiptUrl String?
-  createdAt DateTime @default(now())
+  createdAt  DateTime @default(now())
 }
 
 model Opportunity {
-  id String @id @default(cuid())
-  voucherId String
-  voucher Voucher @relation(fields:[voucherId], references:[id], onDelete:Cascade)
-  title String
-  startsAt DateTime?
-  endsAt DateTime?
-  sourceUrl String?
+  id              String    @id @default(cuid())
+  voucherId       String
+  voucher         Voucher   @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  title           String
+  startsAt        DateTime?
+  endsAt          DateTime?
+  sourceUrl       String?
   sourceCheckedAt DateTime?
-  distanceKm Float?
-  relevanceScore Int @default(0)
-  reasonJson Json?
-  dismissedAt DateTime?
-  createdAt DateTime @default(now())
+  distanceKm      Float?
+  relevanceScore  Int       @default(0)
+  reasonJson      Json?
+  dismissedAt     DateTime?
+  createdAt       DateTime  @default(now())
 }
 
 model MerchantSource {
-  id String @id @default(cuid())
-  userId String
-  user User @relation(fields:[userId], references:[id], onDelete:Cascade)
-  merchantName String
-  url String
-  enabled Boolean @default(true)
-  checkIntervalHours Int @default(24)
-  lastCheckedAt DateTime?
-  lastSuccessAt DateTime?
-  etag String?
-  lastModified String?
-  failureCount Int @default(0)
-  lastError String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                 String          @id @default(cuid())
+  userId             String
+  user               User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  merchantName       String
+  url                String
+  enabled            Boolean         @default(true)
+  checkIntervalHours Int             @default(24)
+  lastCheckedAt      DateTime?
+  lastSuccessAt      DateTime?
+  nextCheckAt        DateTime        @default(now())
+  etag               String?
+  lastModified       String?
+  contentHash        String?
+  failureCount       Int             @default(0)
+  lastError          String?
+  events             MerchantEvent[]
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
 
   @@unique([userId, url])
   @@index([userId, enabled])
+  @@index([enabled, nextCheckAt])
+}
+
+model MerchantEvent {
+  id              String         @id @default(cuid())
+  sourceId        String
+  source          MerchantSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  externalKey     String
+  merchantName    String
+  title           String
+  description     String?
+  startsAt        DateTime?
+  endsAt          DateTime?
+  sourceUrl       String?
+  sourceLabel     String?
+  categories      String[]
+  fingerprint     String
+  active          Boolean        @default(true)
+  missingCount    Int            @default(0)
+  firstDetectedAt DateTime
+  lastDetectedAt  DateTime
+  lastChangedAt   DateTime
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@unique([sourceId, externalKey])
+  @@index([sourceId, active])
+  @@index([endsAt])
 }
