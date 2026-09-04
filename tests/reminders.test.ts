@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   calendarDaysUntil,
   dueReminderDays,
+  expandNotificationChannels,
   planExpiryNotifications,
   planOpportunityNotifications
 } from '../lib/reminders.ts';
@@ -58,4 +59,29 @@ test('opportunity notifications respect minimum relevance score', () => {
   assert.equal(low.length, 0);
   assert.equal(high.length, 1);
   assert.equal(high[0].dedupeKey, 'opportunity:voucher-1:event-1:in-app');
+});
+
+test('email channel queues a separate notification for the user address', () => {
+  const now = new Date('2026-09-04T08:00:00.000Z');
+  const base = planExpiryNotifications([{
+    id: 'voucher-1',
+    userId: 'user-1',
+    merchantName: 'Gasthaus Adler',
+    title: 'Restaurant-Gutschein',
+    validUntil: '2026-09-11T21:59:00.000Z',
+    physicalVoucher: false
+  }], now, 'Europe/Berlin');
+  const drafts = expandNotificationChannels(
+    base,
+    ['IN_APP', 'EMAIL'],
+    new Map([['user-1', 'frank@example.test']]),
+    now
+  );
+
+  assert.equal(drafts.length, 2);
+  assert.equal(drafts[0].deliveryStatus, 'DELIVERED');
+  assert.equal(drafts[1].channel, 'EMAIL');
+  assert.equal(drafts[1].deliveryStatus, 'PENDING');
+  assert.equal(drafts[1].recipient, 'frank@example.test');
+  assert.equal(drafts[1].dedupeKey, 'expiry:voucher-1:7:email');
 });

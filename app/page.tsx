@@ -6,7 +6,7 @@ export default function Home() {
   const total = active.reduce((s,v) => s + (v.valueAmount ?? 0), 0);
   const physical = active.filter(v => v.physicalVoucher).length;
   return <main>
-    <p className="badge">MVP 0.6</p>
+    <p className="badge">MVP 0.7</p>
     <h1>FISCHERTEC Benefit Agent</h1>
     <p className="muted">Vorhandene Gutscheine, Guthaben und Vorteile erkennen, wiederfinden und sinnvoll einsetzen.</p>
 

@@ -1,6 +1,6 @@
 # FISCHERTEC Benefit Agent (FBA)
 
-MVP 0.6 for capturing vouchers/benefits, reviewing extracted data, locating physical originals, matching benefits with relevant merchant events and delivering actionable reminders.
+MVP 0.7 for capturing vouchers/benefits, reviewing extracted data, locating physical originals, matching benefits with relevant merchant events and delivering actionable reminders.
 
 ## Implemented
 
@@ -29,6 +29,8 @@ MVP 0.6 for capturing vouchers/benefits, reviewing extracted data, locating phys
 - persistent, deduplicated in-app notifications for voucher expiry and relevant merchant events
 - calendar-day expiry reminders at 30, 14, 7, 2 and 0 days in `Europe/Berlin`
 - protected notification scheduler at `POST /api/jobs/notifications`
+- provider-neutral HTTP delivery adapter for queued email notifications
+- protected email delivery job with claim locking, delivery-attempt audit trail and exponential retry
 - notification inbox at `/notifications` with read and dismiss actions
 - GitHub Actions CI for tests and production build
 
@@ -76,16 +78,28 @@ POST /api/jobs/notifications
 Authorization: Bearer <NOTIFICATION_JOB_TOKEN>
 Content-Type: application/json
 
-{"timeZone":"Europe/Berlin","minimumOpportunityScore":50}
+{"timeZone":"Europe/Berlin","minimumOpportunityScore":50,"channels":["IN_APP","EMAIL"]}
 ```
 
 The job creates expiry reminders exactly 30, 14, 7, 2 and 0 local calendar days before expiration. Opportunity alerts are created for active, monitored vouchers when a merchant event reaches the configured score. Repeated job runs are safe because every notification has a stable deduplication key.
 
 Apply all Prisma migrations before enabling the job. Users can view, mark as read and dismiss their in-app notifications at `/notifications` or through `GET` and `PATCH /api/notifications`.
 
+Email generation is opt-in per scheduler call through `channels`. Configure the provider-neutral delivery endpoint with `NOTIFICATION_DELIVERY_URL` and optionally `NOTIFICATION_DELIVERY_TOKEN`. Then run:
+
+```http
+POST /api/jobs/notification-delivery
+Authorization: Bearer <NOTIFICATION_JOB_TOKEN>
+Content-Type: application/json
+
+{"limit":20}
+```
+
+The adapter sends `notificationId`, `to`, `subject`, `text` and `metadata` as JSON. It also sends `notificationId` in the `Idempotency-Key` header. Providers should enforce that key because delivery is at least once. Failed requests are retried after 15, 30, 60 and 120 minutes; the fifth failed attempt moves the notification to `FAILED`. Each attempt is persisted.
+
 ## Next development steps
 
 1. select and connect the first production OCR/QR/barcode provider
-2. email and push delivery adapters for the existing notification queue
+2. connect and validate the first production email provider
 3. email-forwarding ingestion
 4. authentication plus calendar/location context and family wallet

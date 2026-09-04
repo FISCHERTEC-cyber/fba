@@ -3,6 +3,7 @@ import { buildOpportunities, type MerchantEvent } from './opportunity-engine';
 import { prisma } from './prisma';
 import {
   DEFAULT_REMINDER_TIME_ZONE,
+  expandNotificationChannels,
   planExpiryNotifications,
   planOpportunityNotifications,
   type ExpiryVoucherCandidate,
@@ -14,12 +15,14 @@ export interface GenerateNotificationsOptions {
   now?: Date;
   timeZone?: string;
   minimumOpportunityScore?: number;
+  channels?: Array<'IN_APP' | 'EMAIL'>;
 }
 
 export async function generateDueNotifications(options: GenerateNotificationsOptions = {}) {
   const now = options.now ?? new Date();
   const timeZone = options.timeZone ?? DEFAULT_REMINDER_TIME_ZONE;
   const minimumScore = options.minimumOpportunityScore ?? 50;
+  const channels = normaliseChannels(options.channels);
   const expiryUpperBound = new Date(now.getTime() + 31 * 86_400_000);
   const expiryLowerBound = new Date(now.getTime() - 2 * 86_400_000);
 
@@ -54,7 +57,7 @@ export async function generateDueNotifications(options: GenerateNotificationsOpt
     physicalVoucher: voucher.physicalVoucher,
     storageLocation: voucher.storageLocation ?? undefined
   }));
-  const expiryDrafts = planExpiryNotifications(expiryCandidates, now, timeZone);
+  const baseExpiryDrafts = planExpiryNotifications(expiryCandidates, now, timeZone);
 
   const vouchersByUser = groupBy(monitoredVoucherRows.map(toVoucher), voucher => voucher.userId);
   const eventsByUser = groupBy(eventRows, event => event.source.userId);
@@ -81,7 +84,19 @@ export async function generateDueNotifications(options: GenerateNotificationsOpt
     }
   }
 
-  const opportunityDrafts = planOpportunityNotifications(opportunityCandidates, now, minimumScore);
+  const baseOpportunityDrafts = planOpportunityNotifications(opportunityCandidates, now, minimumScore);
+  const userIds = new Set([
+    ...baseExpiryDrafts.map(draft => draft.userId),
+    ...baseOpportunityDrafts.map(draft => draft.userId)
+  ]);
+  const emailByUser = channels.includes('EMAIL') && userIds.size
+    ? new Map((await prisma.user.findMany({
+      where: { id: { in: [...userIds] } },
+      select: { id: true, email: true }
+    })).map(user => [user.id, user.email]))
+    : new Map<string, string>();
+  const expiryDrafts = expandNotificationChannels(baseExpiryDrafts, channels, emailByUser, now);
+  const opportunityDrafts = expandNotificationChannels(baseOpportunityDrafts, channels, emailByUser, now);
   const [expiryResult, opportunityResult] = await prisma.$transaction([
     prisma.notification.createMany({ data: asCreateManyInput(expiryDrafts), skipDuplicates: true }),
     prisma.notification.createMany({ data: asCreateManyInput(opportunityDrafts), skipDuplicates: true })
@@ -95,6 +110,10 @@ export async function generateDueNotifications(options: GenerateNotificationsOpt
   };
 }
 
+function normaliseChannels(channels: Array<'IN_APP' | 'EMAIL'> | undefined) {
+  return [...new Set(channels?.length ? channels : ['IN_APP' as const])];
+}
+
 function asCreateManyInput<T extends { payload: Record<string, unknown> }>(drafts: T[]) {
   return drafts.map(draft => ({ ...draft, payload: draft.payload as Prisma.InputJsonValue }));
 }
@@ -104,6 +123,7 @@ export async function listNotifications(userId: string, options: { unreadOnly?: 
   return prisma.notification.findMany({
     where: {
       userId,
+      channel: 'IN_APP',
       dismissedAt: null,
       ...(options.unreadOnly ? { readAt: null } : {})
     },
@@ -114,13 +134,13 @@ export async function listNotifications(userId: string, options: { unreadOnly?: 
 
 export function countUnreadNotifications(userId: string) {
   return prisma.notification.count({
-    where: { userId, dismissedAt: null, readAt: null }
+    where: { userId, channel: 'IN_APP', dismissedAt: null, readAt: null }
   });
 }
 
 export async function updateNotificationState(userId: string, id: string, action: 'READ' | 'DISMISS', now = new Date()) {
   const result = await prisma.notification.updateMany({
-    where: { id, userId },
+    where: { id, userId, channel: 'IN_APP' },
     data: action === 'READ' ? { readAt: now } : { dismissedAt: now }
   });
   if (!result.count) throw new Error('Benachrichtigung wurde nicht gefunden.');

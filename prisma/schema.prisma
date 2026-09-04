@@ -45,6 +45,7 @@ enum NotificationChannel {
 
 enum NotificationDeliveryStatus {
   PENDING
+  PROCESSING
   DELIVERED
   FAILED
 }
@@ -173,26 +174,48 @@ model MerchantEvent {
 }
 
 model Notification {
-  id              String                     @id @default(cuid())
-  userId          String
-  user            User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  voucherId       String?
-  voucher         Voucher?                   @relation(fields: [voucherId], references: [id], onDelete: Cascade)
-  merchantEventId String?
-  merchantEvent   MerchantEvent?             @relation(fields: [merchantEventId], references: [id], onDelete: Cascade)
-  kind            NotificationKind
-  channel         NotificationChannel        @default(IN_APP)
-  deliveryStatus  NotificationDeliveryStatus @default(DELIVERED)
-  dedupeKey       String                     @unique
-  title           String
-  body            String
-  payload         Json?
-  deliveredAt     DateTime?
-  readAt          DateTime?
-  dismissedAt     DateTime?
-  createdAt       DateTime                   @default(now())
-  updatedAt       DateTime                   @updatedAt
+  id                  String                        @id @default(cuid())
+  userId              String
+  user                User                          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  voucherId           String?
+  voucher             Voucher?                      @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  merchantEventId     String?
+  merchantEvent       MerchantEvent?                @relation(fields: [merchantEventId], references: [id], onDelete: Cascade)
+  kind                NotificationKind
+  channel             NotificationChannel           @default(IN_APP)
+  deliveryStatus      NotificationDeliveryStatus    @default(DELIVERED)
+  dedupeKey           String                        @unique
+  title               String
+  body                String
+  payload             Json?
+  recipient           String?
+  attemptCount        Int                           @default(0)
+  nextAttemptAt       DateTime?
+  processingStartedAt DateTime?
+  lastError           String?
+  providerMessageId   String?
+  deliveredAt         DateTime?
+  readAt              DateTime?
+  dismissedAt         DateTime?
+  deliveryAttempts    NotificationDeliveryAttempt[]
+  createdAt           DateTime                      @default(now())
+  updatedAt           DateTime                      @updatedAt
 
   @@index([userId, dismissedAt, readAt])
   @@index([deliveryStatus, createdAt])
+  @@index([channel, deliveryStatus, nextAttemptAt])
+}
+
+model NotificationDeliveryAttempt {
+  id                String       @id @default(cuid())
+  notificationId    String
+  notification      Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  attemptNumber     Int
+  successful        Boolean
+  providerMessageId String?
+  error             String?
+  createdAt         DateTime     @default(now())
+
+  @@unique([notificationId, attemptNumber])
+  @@index([createdAt])
 }

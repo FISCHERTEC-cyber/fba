@@ -26,13 +26,15 @@ export interface NotificationDraft {
   voucherId: string;
   merchantEventId?: string;
   kind: 'EXPIRY' | 'OPPORTUNITY';
-  channel: 'IN_APP';
-  deliveryStatus: 'DELIVERED';
+  channel: 'IN_APP' | 'EMAIL';
+  deliveryStatus: 'PENDING' | 'DELIVERED';
   dedupeKey: string;
   title: string;
   body: string;
   payload: Record<string, unknown>;
-  deliveredAt: Date;
+  recipient?: string;
+  nextAttemptAt?: Date;
+  deliveredAt?: Date;
 }
 
 export function dueReminderDays(
@@ -119,6 +121,28 @@ export function planOpportunityNotifications(
         deliveredAt: now
       };
     });
+}
+
+export function expandNotificationChannels(
+  drafts: NotificationDraft[],
+  channels: Array<'IN_APP' | 'EMAIL'>,
+  emailByUser: Map<string, string>,
+  now: Date
+): NotificationDraft[] {
+  return drafts.flatMap(draft => channels.flatMap(channel => {
+    if (channel === 'IN_APP') return [{ ...draft }];
+    const recipient = emailByUser.get(draft.userId)?.trim();
+    if (!recipient) return [];
+    return [{
+      ...draft,
+      channel: 'EMAIL' as const,
+      deliveryStatus: 'PENDING' as const,
+      dedupeKey: draft.dedupeKey.replace(/:in-app$/, ':email'),
+      recipient,
+      nextAttemptAt: now,
+      deliveredAt: undefined
+    }];
+  }));
 }
 
 function localDayNumber(value: Date, timeZone: string) {

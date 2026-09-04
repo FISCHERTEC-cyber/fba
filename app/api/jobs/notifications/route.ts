@@ -11,15 +11,20 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => ({})) as {
       timeZone?: string;
       minimumOpportunityScore?: number;
+      channels?: Array<'IN_APP' | 'EMAIL'>;
     };
     const minimumOpportunityScore = body.minimumOpportunityScore ?? 50;
     if (!Number.isFinite(minimumOpportunityScore) || minimumOpportunityScore < 0 || minimumOpportunityScore > 100) {
       throw new Error('minimumOpportunityScore muss zwischen 0 und 100 liegen.');
     }
+    if (body.channels?.some(channel => channel !== 'IN_APP' && channel !== 'EMAIL')) {
+      throw new Error('channels enthält einen ungültigen Kanal.');
+    }
 
     const result = await generateDueNotifications({
       timeZone: body.timeZone,
-      minimumOpportunityScore
+      minimumOpportunityScore,
+      channels: body.channels
     });
     return NextResponse.json(result);
   } catch (error) {
