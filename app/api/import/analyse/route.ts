@@ -1,18 +1,25 @@
 import { NextResponse } from 'next/server';
 import { VoucherImportPipeline, type DocumentTextProvider } from '@/lib/import-pipeline';
+import { DecoderTextProvider } from '@/lib/binary-import';
+import { HttpDocumentDecoder } from '@/lib/http-document-decoder';
 import { HeuristicVoucherStructurer } from '@/lib/heuristic-structurer';
 
-const textProvider: DocumentTextProvider = {
-  async extract() {
-    throw new Error('Für Binärdateien ist noch kein OCR-Provider konfiguriert.');
+function createTextProvider(): DocumentTextProvider {
+  const endpoint = process.env.OCR_PROVIDER_URL;
+  if (!endpoint) {
+    return {
+      async extract() {
+        throw new Error('Für Binärdateien ist OCR_PROVIDER_URL noch nicht konfiguriert.');
+      }
+    };
   }
-};
-
-const pipeline = new VoucherImportPipeline(textProvider, new HeuristicVoucherStructurer());
+  return new DecoderTextProvider(new HttpDocumentDecoder(endpoint, process.env.OCR_PROVIDER_TOKEN));
+}
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
+    const pipeline = new VoucherImportPipeline(createTextProvider(), new HeuristicVoucherStructurer());
     const result = await pipeline.analyse(body);
     return NextResponse.json(result);
   } catch (error) {
