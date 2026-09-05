@@ -9,25 +9,24 @@ export interface SaveReviewedVoucherInput {
   confirmedFields?: string[];
 }
 
-export async function saveReviewedVoucher(input: SaveReviewedVoucherInput) {
-  const { userId, extraction } = input;
-  if (!userId) throw new Error('userId fehlt.');
-
+export function assertExtractionReviewed(extraction: VoucherExtraction, confirmedFields: string[] = []) {
   const unresolvedLowConfidence = Object.entries(extraction.confidence.fields)
     .filter(([, confidence]) => confidence < 0.82)
     .map(([field]) => field)
-    .filter(field => !(input.confirmedFields ?? []).includes(field));
+    .filter(field => !confirmedFields.includes(field));
 
-  if (extraction.confidence.overall < 0.82 && !(input.confirmedFields ?? []).includes('_overall')) {
+  if (extraction.confidence.overall < 0.82 && !confirmedFields.includes('_overall')) {
     unresolvedLowConfidence.unshift('_overall');
   }
 
   if (unresolvedLowConfidence.length) {
     throw new Error(`Nicht bestätigte unsichere Felder: ${unresolvedLowConfidence.join(', ')}`);
   }
+}
 
-  return prisma.voucher.create({
-    data: {
+export function reviewedVoucherData(userId: string, extraction: VoucherExtraction) {
+  if (!userId) throw new Error('userId fehlt.');
+  return {
       userId,
       merchantName: extraction.merchantName,
       title: extraction.title,
@@ -50,8 +49,12 @@ export async function saveReviewedVoucher(input: SaveReviewedVoucherInput) {
       extractionConfidence: extraction.confidence.overall,
       sourceType: extraction.sourceType,
       sourceReference: extraction.sourceReference
-    }
-  });
+  };
+}
+
+export async function saveReviewedVoucher(input: SaveReviewedVoucherInput) {
+  assertExtractionReviewed(input.extraction, input.confirmedFields);
+  return prisma.voucher.create({ data: reviewedVoucherData(input.userId, input.extraction) });
 }
 
 export async function listActiveVouchers(userId: string) {

@@ -78,6 +78,9 @@ model VoucherImportCandidate {
   analysis          Json
   reviewRequired    Boolean               @default(true)
   status            ImportCandidateStatus @default(PENDING)
+  voucherId         String?                @unique
+  voucher           Voucher?               @relation(fields: [voucherId], references: [id], onDelete: SetNull)
+  processedAt       DateTime?
   createdAt         DateTime              @default(now())
   updatedAt         DateTime              @updatedAt
 
@@ -116,6 +119,7 @@ model Voucher {
   opportunities           Opportunity[]
   transactions            VoucherTransaction[]
   notifications           Notification[]
+  importCandidate         VoucherImportCandidate?
   createdAt               DateTime             @default(now())
   updatedAt               DateTime             @updatedAt
 }
