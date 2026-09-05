@@ -15,6 +15,10 @@ type Voucher = {
   validUntil: string | null;
   physicalVoucher: boolean;
   storageLocation: string | null;
+  owned: boolean;
+  canRedeem: boolean;
+  accessRole: 'OWNER' | 'MEMBER' | 'VIEWER';
+  wallet: { id: string; name: string } | null;
 };
 
 export default function VouchersPage() {
@@ -76,17 +80,18 @@ export default function VouchersPage() {
             <div>
               <h2>{voucher.merchantName}: {voucher.title}</h2>
               <div className="muted">Gültig bis {formatDate(voucher.validUntil)}</div>
+              {voucher.wallet && <div className="wallet-note">Familien-Wallet: {voucher.wallet.name}{!voucher.owned ? ` · ${voucher.accessRole === 'VIEWER' ? 'nur ansehen' : 'gemeinsam nutzbar'}` : ''}</div>}
               {voucher.physicalVoucher && <div className="storage-note">Original: {voucher.storageLocation || 'Aufbewahrungsort nicht erfasst'}</div>}
             </div>
             <div className="metric">{monetary
               ? formatMoney(voucher.remainingAmount!, voucher.currency)
               : voucher.discountPercent ? `${Number(voucher.discountPercent)} %` : kindLabel(voucher.kind)}</div>
           </div>
-          <div className="redemption-row section-gap-small">
+          {voucher.canRedeem ? <div className="redemption-row section-gap-small">
             {monetary && <input aria-label={`Teilbetrag für ${voucher.title}`} inputMode="decimal" placeholder="Teilbetrag in EUR" value={amounts[voucher.id] ?? ''} onChange={event => setAmounts(current => ({ ...current, [voucher.id]: event.target.value }))} />}
             {monetary && <button className="button-secondary" disabled={busyId === voucher.id} onClick={() => redeem(voucher, false)}>Teilbetrag abbuchen</button>}
             <button className="primary" disabled={busyId === voucher.id} onClick={() => redeem(voucher, true)}>{busyId === voucher.id ? 'Speichere…' : 'Vollständig eingelöst'}</button>
-          </div>
+          </div> : <p className="muted section-gap-small">Dieser Gutschein wurde nur zur Ansicht freigegeben.</p>}
         </article>;
       })}
       {!vouchers.length && !error && <div className="card empty-state"><h2>Keine aktiven Gutscheine</h2><p className="muted">Erfasste Gutscheine erscheinen hier.</p></div>}

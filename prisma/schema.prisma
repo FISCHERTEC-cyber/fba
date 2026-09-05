@@ -56,17 +56,73 @@ enum ImportCandidateStatus {
   DISMISSED
 }
 
+enum FamilyWalletRole {
+  OWNER
+  MEMBER
+  VIEWER
+}
+
 model User {
-  id              String           @id @default(cuid())
-  email           String           @unique
-  supabaseUserId  String?          @unique
+  id                        String                   @id @default(cuid())
+  email                     String                   @unique
+  supabaseUserId            String?                  @unique
+  vouchers                  Voucher[]
+  merchantSources           MerchantSource[]
+  notifications             Notification[]
+  importCandidates          VoucherImportCandidate[]
+  devices                   UserDevice[]
+  sessions                  UserSession[]
+  walletsCreated            FamilyWallet[]           @relation("FamilyWalletCreator")
+  walletMemberships         FamilyWalletMember[]
+  walletInvitationsSent     FamilyWalletInvitation[] @relation("FamilyWalletInviter")
+  walletInvitationsAccepted FamilyWalletInvitation[] @relation("FamilyWalletAcceptedBy")
+  createdAt                 DateTime                 @default(now())
+}
+
+model FamilyWallet {
+  id              String                   @id @default(cuid())
+  name            String
+  createdByUserId String
+  createdBy       User                     @relation("FamilyWalletCreator", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  members         FamilyWalletMember[]
+  invitations     FamilyWalletInvitation[]
   vouchers        Voucher[]
-  merchantSources MerchantSource[]
-  notifications   Notification[]
-  importCandidates VoucherImportCandidate[]
-  devices         UserDevice[]
-  sessions        UserSession[]
-  createdAt       DateTime         @default(now())
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+
+  @@index([createdByUserId])
+}
+
+model FamilyWalletMember {
+  walletId String
+  wallet   FamilyWallet     @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role     FamilyWalletRole @default(MEMBER)
+  joinedAt DateTime         @default(now())
+
+  @@id([walletId, userId])
+  @@index([userId])
+}
+
+model FamilyWalletInvitation {
+  id               String           @id @default(cuid())
+  walletId         String
+  wallet           FamilyWallet     @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  email            String
+  role             FamilyWalletRole @default(MEMBER)
+  tokenHash        String           @unique
+  invitedByUserId  String
+  invitedBy        User             @relation("FamilyWalletInviter", fields: [invitedByUserId], references: [id], onDelete: Cascade)
+  expiresAt        DateTime
+  acceptedAt       DateTime?
+  acceptedByUserId String?
+  acceptedBy       User?            @relation("FamilyWalletAcceptedBy", fields: [acceptedByUserId], references: [id], onDelete: SetNull)
+  revokedAt        DateTime?
+  createdAt        DateTime         @default(now())
+
+  @@index([walletId, email, acceptedAt, revokedAt])
+  @@index([email, expiresAt])
 }
 
 model UserDevice {
@@ -111,8 +167,8 @@ model VoucherImportCandidate {
   analysis          Json
   reviewRequired    Boolean               @default(true)
   status            ImportCandidateStatus @default(PENDING)
-  voucherId         String?                @unique
-  voucher           Voucher?               @relation(fields: [voucherId], references: [id], onDelete: SetNull)
+  voucherId         String?               @unique
+  voucher           Voucher?              @relation(fields: [voucherId], references: [id], onDelete: SetNull)
   processedAt       DateTime?
   createdAt         DateTime              @default(now())
   updatedAt         DateTime              @updatedAt
@@ -122,39 +178,43 @@ model VoucherImportCandidate {
 }
 
 model Voucher {
-  id                      String               @id @default(cuid())
+  id                      String                  @id @default(cuid())
   userId                  String
-  user                    User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                    User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  walletId                String?
+  wallet                  FamilyWallet?           @relation(fields: [walletId], references: [id], onDelete: SetNull)
   merchantName            String
   merchantUrl             String?
   title                   String
   kind                    VoucherKind
-  valueAmount             Decimal?             @db.Decimal(12, 2)
-  currency                String?              @default("EUR")
-  discountPercent         Decimal?             @db.Decimal(5, 2)
+  valueAmount             Decimal?                @db.Decimal(12, 2)
+  currency                String?                 @default("EUR")
+  discountPercent         Decimal?                @db.Decimal(5, 2)
   code                    String?
   barcode                 String?
   qrPayload               String?
   validFrom               DateTime?
   validUntil              DateTime?
-  minimumOrderValue       Decimal?             @db.Decimal(12, 2)
+  minimumOrderValue       Decimal?                @db.Decimal(12, 2)
   redemptionUrl           String?
   terms                   String?
-  physicalVoucher         Boolean              @default(false)
+  physicalVoucher         Boolean                 @default(false)
   storageLocation         String?
   storageLocationPhotoUrl String?
   lastLocationUpdate      DateTime?
-  status                  VoucherStatus        @default(ACTIVE)
-  eventMonitoringEnabled  Boolean              @default(false)
+  status                  VoucherStatus           @default(ACTIVE)
+  eventMonitoringEnabled  Boolean                 @default(false)
   extractionConfidence    Float?
-  sourceType              SourceType           @default(MANUAL)
+  sourceType              SourceType              @default(MANUAL)
   sourceReference         String?
   opportunities           Opportunity[]
   transactions            VoucherTransaction[]
   notifications           Notification[]
   importCandidate         VoucherImportCandidate?
-  createdAt               DateTime             @default(now())
-  updatedAt               DateTime             @updatedAt
+  createdAt               DateTime                @default(now())
+  updatedAt               DateTime                @updatedAt
+
+  @@index([walletId, status])
 }
 
 model VoucherTransaction {

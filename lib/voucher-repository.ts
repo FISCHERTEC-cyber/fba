@@ -2,6 +2,7 @@ import type { VoucherExtraction } from './extraction';
 import { Prisma } from '@prisma/client';
 import { prisma } from './prisma';
 import { decideRedemption } from './redemption';
+import { canRedeemFamilyVoucher } from './family-wallet-policy';
 
 export interface SaveReviewedVoucherInput {
   userId: string;
@@ -59,8 +60,23 @@ export async function saveReviewedVoucher(input: SaveReviewedVoucherInput) {
 
 export async function listActiveVouchers(userId: string) {
   const vouchers = await prisma.voucher.findMany({
-    where: { userId, status: 'ACTIVE' },
-    include: { transactions: { orderBy: { createdAt: 'desc' } } },
+    where: {
+      status: 'ACTIVE',
+      OR: [
+        { userId },
+        { wallet: { members: { some: { userId } } } }
+      ]
+    },
+    include: {
+      transactions: { orderBy: { createdAt: 'desc' } },
+      wallet: {
+        select: {
+          id: true,
+          name: true,
+          members: { where: { userId }, select: { role: true } }
+        }
+      }
+    },
     orderBy: [{ validUntil: 'asc' }, { createdAt: 'desc' }]
   });
 
@@ -71,7 +87,16 @@ export async function listActiveVouchers(userId: string) {
     const remainingAmount = voucher.valueAmount === null
       ? null
       : Math.max(0, Math.round((Number(voucher.valueAmount) - redeemedAmount + Number.EPSILON) * 100) / 100);
-    return { ...voucher, redeemedAmount, remainingAmount };
+    const owned = voucher.userId === userId;
+    const accessRole = voucher.wallet?.members[0]?.role;
+    return {
+      ...voucher,
+      redeemedAmount,
+      remainingAmount,
+      owned,
+      accessRole: owned ? 'OWNER' : accessRole,
+      canRedeem: owned || canRedeemFamilyVoucher(accessRole)
+    };
   });
 }
 
@@ -90,7 +115,13 @@ export async function recordRedemption(input: RecordRedemptionInput) {
 
   return prisma.$transaction(async transaction => {
     const voucher = await transaction.voucher.findFirst({
-      where: { id: input.voucherId, userId: input.userId },
+      where: {
+        id: input.voucherId,
+        OR: [
+          { userId: input.userId },
+          { wallet: { members: { some: { userId: input.userId, role: { in: ['OWNER', 'MEMBER'] } } } } }
+        ]
+      },
       include: { transactions: true }
     });
     if (!voucher) throw new Error('Gutschein wurde nicht gefunden.');
