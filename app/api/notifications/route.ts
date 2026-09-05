@@ -8,7 +8,7 @@ import { requireUserId } from '@/lib/request-user';
 
 export async function GET(request: Request) {
   try {
-    const userId = requireUserId(request);
+    const userId = await requireUserId(request);
     const url = new URL(request.url);
     const unreadOnly = url.searchParams.get('unreadOnly') === 'true';
     const limitValue = Number(url.searchParams.get('limit') ?? 50);
@@ -31,7 +31,7 @@ export async function GET(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const userId = requireUserId(request);
+    const userId = await requireUserId(request);
     const body = await request.json() as { id?: string; action?: 'READ' | 'DISMISS' };
     if (!body.id?.trim()) throw new Error('id fehlt.');
     if (body.action !== 'READ' && body.action !== 'DISMISS') throw new Error('action ist ungültig.');

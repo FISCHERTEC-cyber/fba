@@ -59,11 +59,44 @@ enum ImportCandidateStatus {
 model User {
   id              String           @id @default(cuid())
   email           String           @unique
+  supabaseUserId  String?          @unique
   vouchers        Voucher[]
   merchantSources MerchantSource[]
   notifications   Notification[]
   importCandidates VoucherImportCandidate[]
+  devices         UserDevice[]
+  sessions        UserSession[]
   createdAt       DateTime         @default(now())
+}
+
+model UserDevice {
+  id         String        @id @default(cuid())
+  userId     String
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String
+  name       String?
+  lastSeenAt DateTime      @default(now())
+  revokedAt  DateTime?
+  sessions   UserSession[]
+  createdAt  DateTime      @default(now())
+
+  @@unique([userId, tokenHash])
+  @@index([userId, revokedAt])
+}
+
+model UserSession {
+  id         String     @id @default(cuid())
+  userId     String
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceId   String
+  device     UserDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  tokenHash  String     @unique
+  expiresAt  DateTime
+  lastSeenAt DateTime   @default(now())
+  revokedAt  DateTime?
+  createdAt  DateTime   @default(now())
+
+  @@index([userId, revokedAt, expiresAt])
 }
 
 model VoucherImportCandidate {

@@ -15,7 +15,7 @@ const actionSchema = z.discriminatedUnion('action', [
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    const userId = requireUserId(request);
+    const userId = await requireUserId(request);
     const { id } = await context.params;
     const body = actionSchema.parse(await request.json());
     if (body.action === 'DISMISS') {

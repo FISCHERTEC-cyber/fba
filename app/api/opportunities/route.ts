@@ -6,7 +6,7 @@ import type { Voucher } from '@/lib/types';
 
 export async function GET(request: Request) {
   try {
-    const userId = requireUserId(request);
+    const userId = await requireUserId(request);
     const url = new URL(request.url);
     const preferredCategories = url.searchParams.get('categories')
       ?.split(',')

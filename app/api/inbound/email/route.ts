@@ -6,7 +6,7 @@ import { saveEmailImportCandidate } from '@/lib/import-candidate-repository';
 import { emailImportSource, inboundEmailSchema } from '@/lib/inbound-email';
 import { VoucherImportPipeline, type DocumentTextProvider } from '@/lib/import-pipeline';
 import { requireInboundEmailToken } from '@/lib/job-auth';
-import { requireUserId } from '@/lib/request-user';
+import { requireWebhookUserId } from '@/lib/request-user';
 
 function textProvider(): DocumentTextProvider {
   const endpoint = process.env.OCR_PROVIDER_URL;
@@ -17,7 +17,7 @@ function textProvider(): DocumentTextProvider {
 export async function POST(request: Request) {
   try {
     requireInboundEmailToken(request);
-    const userId = requireUserId(request);
+    const userId = requireWebhookUserId(request);
     const email = inboundEmailSchema.parse(await request.json());
     const pipeline = new VoucherImportPipeline(textProvider(), new HeuristicVoucherStructurer());
     const analysis = await pipeline.analyse(emailImportSource(email));

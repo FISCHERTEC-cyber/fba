@@ -11,6 +11,7 @@ export default function Home() {
     <p className="muted">Vorhandene Gutscheine, Guthaben und Vorteile erkennen, wiederfinden und sinnvoll einsetzen.</p>
 
     <section className="grid" style={{marginTop:20}}>
+      <Link className="card" href="/account"><strong>Anmeldung und Konto</strong><div className="muted">Sitzung, Gerätebegrenzung und kontrollierte Übernahme verwalten.</div></Link>
       <div className="card"><div className="muted">Aktiver Geldwert</div><div className="metric">{total.toFixed(0)} €</div></div>
       <div className="card"><div className="muted">Aktive Vorteile</div><div className="metric">{active.length}</div></div>
       <div className="card"><div className="muted">Physische Originale</div><div className="metric">{physical}</div></div>

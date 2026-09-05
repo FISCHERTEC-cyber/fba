@@ -4,7 +4,7 @@ import { requireUserId } from '@/lib/request-user';
 
 export async function GET(request: Request) {
   try {
-    const userId = requireUserId(request);
+    const userId = await requireUserId(request);
     return NextResponse.json({ candidates: await listPendingImportCandidates(userId) });
   } catch (error) {
     return NextResponse.json(

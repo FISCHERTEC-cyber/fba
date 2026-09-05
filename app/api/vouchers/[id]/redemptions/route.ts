@@ -14,7 +14,7 @@ const bodySchema = z.object({
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    const userId = requireUserId(request);
+    const userId = await requireUserId(request);
     const { id } = await context.params;
     const body = bodySchema.parse(await request.json());
     const result = await recordRedemption({ userId, voucherId: id, ...body });

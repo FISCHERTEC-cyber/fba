@@ -5,7 +5,7 @@ import { listActiveVouchers, saveReviewedVoucher } from '@/lib/voucher-repositor
 
 export async function GET(request: Request) {
   try {
-    const userId = requireUserId(request);
+    const userId = await requireUserId(request);
     const vouchers = await listActiveVouchers(userId);
     return NextResponse.json({ vouchers });
   } catch (error) {
@@ -18,7 +18,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const userId = requireUserId(request);
+    const userId = await requireUserId(request);
     const body = await request.json() as { extraction?: unknown; confirmedFields?: string[] };
     const extraction = voucherExtractionSchema.parse(body.extraction);
     const voucher = await saveReviewedVoucher({

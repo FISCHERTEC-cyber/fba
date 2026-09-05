@@ -4,7 +4,7 @@ import { requireUserId } from '@/lib/request-user';
 
 export async function GET(request: Request) {
   try {
-    const userId = requireUserId(request);
+    const userId = await requireUserId(request);
     const sources = await listDueMerchantSources(userId);
     return NextResponse.json({ dueSources: sources });
   } catch (error) {
@@ -17,7 +17,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const userId = requireUserId(request);
+    const userId = await requireUserId(request);
     const body = await request.json() as {
       merchantName?: string;
       url?: string;

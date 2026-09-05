@@ -1,6 +1,6 @@
 # FISCHERTEC Benefit Agent (FBA)
 
-MVP 1.0 for capturing vouchers/benefits, reviewing extracted data, locating physical originals, tracking partial redemptions, accepting and reviewing forwarded emails, matching benefits with relevant merchant events and delivering actionable reminders.
+MVP 1.1 for capturing vouchers/benefits, reviewing extracted data, locating physical originals, tracking partial redemptions, accepting and reviewing forwarded emails, matching benefits with relevant merchant events and delivering actionable reminders.
 
 ## Implemented
 
@@ -31,6 +31,10 @@ MVP 1.0 for capturing vouchers/benefits, reviewing extracted data, locating phys
 - automatic status transition to `REDEEMED` when the remaining balance reaches zero
 - authenticated, deduplicated inbound email endpoint with a persistent review queue
 - editable email-import review UI with explicit confirmation, atomic voucher creation and dismiss action
+- Supabase email/password authentication with opaque server-side application sessions
+- five-device limit and one concurrent 15-minute renewable session lease per user
+- controlled session takeover that revokes the previous active session
+- account device list with explicit device revocation and associated session invalidation
 - persistent, deduplicated in-app notifications for voucher expiry and relevant merchant events
 - calendar-day expiry reminders at 30, 14, 7, 2 and 0 days in `Europe/Berlin`
 - protected notification scheduler at `POST /api/jobs/notifications`
@@ -50,7 +54,7 @@ Required runtime configuration for binary recognition:
 
 Text-only imports remain usable without an OCR provider.
 
-Until authentication is connected, the reviewed-voucher UI uses the server-side `FBA_MVP_USER_ID` as its user context. The referenced user must already exist in PostgreSQL. API clients can alternatively send `x-fba-user-id`.
+Interactive APIs require the `fba_session` HttpOnly cookie. Configure `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`. The inbound email webhook remains job-token protected and resolves its target through `FBA_INBOUND_USER_ID` or `x-fba-user-id`.
 
 ## Event discovery
 
