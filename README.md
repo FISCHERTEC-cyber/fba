@@ -1,6 +1,6 @@
 # FISCHERTEC Benefit Agent (FBA)
 
-MVP 0.7 for capturing vouchers/benefits, reviewing extracted data, locating physical originals, matching benefits with relevant merchant events and delivering actionable reminders.
+MVP 0.8 for capturing vouchers/benefits, reviewing extracted data, locating physical originals, tracking partial redemptions, matching benefits with relevant merchant events and delivering actionable reminders.
 
 ## Implemented
 
@@ -26,6 +26,9 @@ MVP 0.7 for capturing vouchers/benefits, reviewing extracted data, locating phys
 - stored opportunity API at `GET /api/opportunities`
 - opportunity UI at `/opportunities`
 - API routes for import analysis, reviewed voucher persistence, merchant sources and opportunity queries
+- persistent voucher inventory at `/vouchers` with calculated remaining balances
+- validated partial redemptions and complete redemption for monetary and non-monetary benefits
+- automatic status transition to `REDEEMED` when the remaining balance reaches zero
 - persistent, deduplicated in-app notifications for voucher expiry and relevant merchant events
 - calendar-day expiry reminders at 30, 14, 7, 2 and 0 days in `Europe/Berlin`
 - protected notification scheduler at `POST /api/jobs/notifications`

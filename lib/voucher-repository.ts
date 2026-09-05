@@ -1,5 +1,7 @@
 import type { VoucherExtraction } from './extraction';
+import { Prisma } from '@prisma/client';
 import { prisma } from './prisma';
+import { decideRedemption } from './redemption';
 
 export interface SaveReviewedVoucherInput {
   userId: string;
@@ -53,8 +55,66 @@ export async function saveReviewedVoucher(input: SaveReviewedVoucherInput) {
 }
 
 export async function listActiveVouchers(userId: string) {
-  return prisma.voucher.findMany({
+  const vouchers = await prisma.voucher.findMany({
     where: { userId, status: 'ACTIVE' },
+    include: { transactions: { orderBy: { createdAt: 'desc' } } },
     orderBy: [{ validUntil: 'asc' }, { createdAt: 'desc' }]
   });
+
+  return vouchers.map(voucher => {
+    const redeemedAmount = voucher.transactions.reduce(
+      (sum, transaction) => sum + Number(transaction.amount ?? 0), 0
+    );
+    const remainingAmount = voucher.valueAmount === null
+      ? null
+      : Math.max(0, Math.round((Number(voucher.valueAmount) - redeemedAmount + Number.EPSILON) * 100) / 100);
+    return { ...voucher, redeemedAmount, remainingAmount };
+  });
+}
+
+export interface RecordRedemptionInput {
+  userId: string;
+  voucherId: string;
+  amount?: number;
+  note?: string;
+  receiptUrl?: string;
+  redeemCompletely?: boolean;
+}
+
+export async function recordRedemption(input: RecordRedemptionInput) {
+  if (!input.userId) throw new Error('userId fehlt.');
+  if (!input.voucherId) throw new Error('voucherId fehlt.');
+
+  return prisma.$transaction(async transaction => {
+    const voucher = await transaction.voucher.findFirst({
+      where: { id: input.voucherId, userId: input.userId },
+      include: { transactions: true }
+    });
+    if (!voucher) throw new Error('Gutschein wurde nicht gefunden.');
+
+    const redeemedAmount = voucher.transactions.reduce(
+      (sum, redemption) => sum + Number(redemption.amount ?? 0), 0
+    );
+    const decision = decideRedemption({
+      kind: voucher.kind,
+      status: voucher.status,
+      valueAmount: voucher.valueAmount === null ? null : Number(voucher.valueAmount),
+      redeemedAmount
+    }, input.amount, input.redeemCompletely);
+
+    const redemption = await transaction.voucherTransaction.create({
+      data: {
+        voucherId: voucher.id,
+        amount: decision.amount,
+        note: input.note?.trim() || undefined,
+        receiptUrl: input.receiptUrl?.trim() || undefined
+      }
+    });
+
+    const updatedVoucher = decision.markRedeemed
+      ? await transaction.voucher.update({ where: { id: voucher.id }, data: { status: 'REDEEMED' } })
+      : voucher;
+
+    return { voucher: updatedVoucher, redemption, remainingAmount: decision.remainingAmount };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }

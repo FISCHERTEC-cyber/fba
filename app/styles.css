@@ -52,6 +52,10 @@ label { display:block; margin:10px 0 6px; font-size:14px; font-weight:600; }
 .empty-state { text-align:center; padding:42px 20px; }
 .empty-state h2 { margin-bottom:8px; }
 .empty-state p { margin:0; }
+.button-link { display:inline-block; border-radius:8px; padding:10px 14px; text-decoration:none; }
+.storage-note { margin-top:10px; padding:8px 10px; border-radius:8px; background:#f3f4f6; }
+.redemption-row { display:flex; gap:10px; align-items:center; justify-content:flex-end; }
+.redemption-row input { max-width:190px; }
 
 @media (max-width: 680px) {
   .form-grid { grid-template-columns:1fr; }
@@ -61,4 +65,6 @@ label { display:block; margin:10px 0 6px; font-size:14px; font-weight:600; }
   .header-action { margin-top:0; }
   .notification-card { grid-template-columns:auto minmax(0,1fr); }
   .notification-actions { grid-column:2; flex-wrap:wrap; }
+  .redemption-row { align-items:stretch; flex-direction:column; }
+  .redemption-row input { max-width:none; }
 }
