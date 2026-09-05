@@ -8,7 +8,11 @@ export function requireNotificationJobToken(request: Request) {
   requireJobToken(request, 'NOTIFICATION_JOB_TOKEN');
 }
 
-function requireJobToken(request: Request, environmentKey: 'SCAN_JOB_TOKEN' | 'NOTIFICATION_JOB_TOKEN') {
+export function requireInboundEmailToken(request: Request) {
+  requireJobToken(request, 'INBOUND_EMAIL_TOKEN');
+}
+
+function requireJobToken(request: Request, environmentKey: 'SCAN_JOB_TOKEN' | 'NOTIFICATION_JOB_TOKEN' | 'INBOUND_EMAIL_TOKEN') {
   const configured = process.env[environmentKey];
   if (!configured) throw new Error(`${environmentKey} ist nicht konfiguriert.`);
 
@@ -17,6 +21,6 @@ function requireJobToken(request: Request, environmentKey: 'SCAN_JOB_TOKEN' | 'N
   const expectedBuffer = Buffer.from(configured);
   const suppliedBuffer = Buffer.from(supplied);
   if (expectedBuffer.length !== suppliedBuffer.length || !timingSafeEqual(expectedBuffer, suppliedBuffer)) {
-    throw new Error('Nicht autorisierter Scan-Aufruf.');
+    throw new Error('Nicht autorisierter Aufruf.');
   }
 }

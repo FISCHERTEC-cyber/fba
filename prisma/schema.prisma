@@ -50,13 +50,39 @@ enum NotificationDeliveryStatus {
   FAILED
 }
 
+enum ImportCandidateStatus {
+  PENDING
+  IMPORTED
+  DISMISSED
+}
+
 model User {
   id              String           @id @default(cuid())
   email           String           @unique
   vouchers        Voucher[]
   merchantSources MerchantSource[]
   notifications   Notification[]
+  importCandidates VoucherImportCandidate[]
   createdAt       DateTime         @default(now())
+}
+
+model VoucherImportCandidate {
+  id                String                @id @default(cuid())
+  userId            String
+  user              User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  providerMessageId String
+  sender            String
+  recipient         String
+  subject           String
+  receivedAt        DateTime
+  analysis          Json
+  reviewRequired    Boolean               @default(true)
+  status            ImportCandidateStatus @default(PENDING)
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+
+  @@unique([userId, providerMessageId])
+  @@index([userId, status, receivedAt])
 }
 
 model Voucher {

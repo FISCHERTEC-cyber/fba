@@ -1,6 +1,6 @@
 # FISCHERTEC Benefit Agent (FBA)
 
-MVP 0.8 for capturing vouchers/benefits, reviewing extracted data, locating physical originals, tracking partial redemptions, matching benefits with relevant merchant events and delivering actionable reminders.
+MVP 0.9 for capturing vouchers/benefits, reviewing extracted data, locating physical originals, tracking partial redemptions, accepting forwarded emails, matching benefits with relevant merchant events and delivering actionable reminders.
 
 ## Implemented
 
@@ -29,6 +29,7 @@ MVP 0.8 for capturing vouchers/benefits, reviewing extracted data, locating phys
 - persistent voucher inventory at `/vouchers` with calculated remaining balances
 - validated partial redemptions and complete redemption for monetary and non-monetary benefits
 - automatic status transition to `REDEEMED` when the remaining balance reaches zero
+- authenticated, deduplicated inbound email endpoint with a persistent review queue
 - persistent, deduplicated in-app notifications for voucher expiry and relevant merchant events
 - calendar-day expiry reminders at 30, 14, 7, 2 and 0 days in `Europe/Berlin`
 - protected notification scheduler at `POST /api/jobs/notifications`
@@ -104,5 +105,5 @@ The adapter sends `notificationId`, `to`, `subject`, `text` and `metadata` as JS
 
 1. select and connect the first production OCR/QR/barcode provider
 2. connect and validate the first production email provider
-3. email-forwarding ingestion
+3. import-candidate review and approval UI
 4. authentication plus calendar/location context and family wallet
