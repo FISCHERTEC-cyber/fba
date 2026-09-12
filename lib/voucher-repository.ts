@@ -1,4 +1,4 @@
-import type { VoucherExtraction } from './extraction';
+import { reviewFlags, type VoucherExtraction } from './extraction';
 import { Prisma } from '@prisma/client';
 import { prisma } from './prisma';
 import { decideRedemption } from './redemption';
@@ -11,14 +11,9 @@ export interface SaveReviewedVoucherInput {
 }
 
 export function assertExtractionReviewed(extraction: VoucherExtraction, confirmedFields: string[] = []) {
-  const unresolvedLowConfidence = Object.entries(extraction.confidence.fields)
-    .filter(([, confidence]) => confidence < 0.82)
-    .map(([field]) => field)
+  const unresolvedLowConfidence = reviewFlags(extraction)
+    .map(({ field }) => field)
     .filter(field => !confirmedFields.includes(field));
-
-  if (extraction.confidence.overall < 0.82 && !confirmedFields.includes('_overall')) {
-    unresolvedLowConfidence.unshift('_overall');
-  }
 
   if (unresolvedLowConfidence.length) {
     throw new Error(`Nicht bestätigte unsichere Felder: ${unresolvedLowConfidence.join(', ')}`);
@@ -59,9 +54,11 @@ export async function saveReviewedVoucher(input: SaveReviewedVoucherInput) {
 }
 
 export async function listActiveVouchers(userId: string) {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
   const vouchers = await prisma.voucher.findMany({
     where: {
       status: 'ACTIVE',
+      AND: [{ OR: [{ validUntil: null }, { validUntil: { gte: today } }] }],
       OR: [
         { userId },
         { wallet: { members: { some: { userId } } } }
@@ -98,6 +95,11 @@ export async function listActiveVouchers(userId: string) {
       canRedeem: owned || canRedeemFamilyVoucher(accessRole)
     };
   });
+}
+
+export async function listExpiredVouchers(userId: string) {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  return prisma.voucher.findMany({ where: { status: 'ACTIVE', validUntil: { lt: today }, OR: [{ userId }, { wallet: { members: { some: { userId } } } }] }, orderBy: [{ validUntil: 'desc' }] });
 }
 
 export interface RecordRedemptionInput {

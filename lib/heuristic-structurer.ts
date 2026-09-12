@@ -1,9 +1,11 @@
 import type { ImportSource, VoucherStructuringProvider } from './import-pipeline';
 
 function isoDateFromGerman(text: string) {
-  const match = text.match(/\b(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{4})\b/);
-  if (!match) return undefined;
-  const [, d, m, y] = match;
+  const germanMatch = text.match(/\b(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{4})\b/);
+  const isoMatch = text.match(/\b(\d{4})-(\d{1,2})-(\d{1,2})\b/);
+  if (!germanMatch && !isoMatch) return undefined;
+  const [, first, second, third] = germanMatch ?? isoMatch!;
+  const [d, m, y] = germanMatch ? [first, second, third] : [third, second, first];
   const date = new Date(Date.UTC(Number(y), Number(m) - 1, Number(d), 12, 0, 0));
   return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
 }
@@ -12,12 +14,12 @@ export class HeuristicVoucherStructurer implements VoucherStructuringProvider {
   async structure(text: string, source: ImportSource) {
     const lines = text.split(/\r?\n/).map(x => x.trim()).filter(Boolean);
     const merchantName = lines[0]?.slice(0, 100) || 'Unbekannter Anbieter';
-    const amountMatch = text.match(/(?:€|EUR\s*)?(\d{1,4}(?:[.,]\d{2})?)\s*(?:€|EUR)\b/i);
+    const amountMatch = text.match(/(?:€\s*(\d{1,4}(?:[.,]\d{1,2})?)\b)|(\d{1,4}(?:[.,]\d{1,2})?)\s*(?:€|EUR)\b/i);
     const percentMatch = text.match(/\b(\d{1,2}(?:[.,]\d+)?)\s*%/);
-    const codeMatch = text.match(/(?:code|gutscheincode|coupon)\s*[:#-]?\s*([A-Z0-9-]{5,32})/i);
+    const codeMatch = text.match(/(?:code|gutscheincode|coupon|voucher\s*(?:code|nr\.?))\s*[:#-]?\s*([A-Z0-9][A-Z0-9_-]{3,63})/i);
     const urlMatch = text.match(/https?:\/\/[^\s)]+/i);
     const validUntil = isoDateFromGerman(text);
-    const valueAmount = amountMatch ? Number(amountMatch[1].replace(',', '.')) : undefined;
+    const valueAmount = amountMatch ? Number((amountMatch[1] ?? amountMatch[2]).replace(',', '.')) : undefined;
     const discountPercent = percentMatch ? Number(percentMatch[1].replace(',', '.')) : undefined;
     const kind = discountPercent != null ? 'DISCOUNT' : valueAmount != null ? 'VALUE' : 'SERVICE';
 
@@ -25,9 +27,10 @@ export class HeuristicVoucherStructurer implements VoucherStructuringProvider {
       merchantName: lines[0] ? 0.72 : 0.2,
       title: 0.75,
       kind: valueAmount != null || discountPercent != null ? 0.88 : 0.55,
-      validUntil: validUntil ? 0.86 : 0.25
+      validUntil: validUntil ? 0.86 : 0.25,
+      code: codeMatch ? 0.92 : 0.25,
+      valueAmount: valueAmount != null ? 0.9 : 0.25
     };
-    if (valueAmount != null) fields.valueAmount = 0.9;
     if (discountPercent != null) fields.discountPercent = 0.9;
     if (codeMatch) fields.code = 0.92;
     if (urlMatch) fields.redemptionUrl = 0.96;

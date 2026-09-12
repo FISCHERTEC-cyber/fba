@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import Link from 'next/link';
 import './styles.css';
 
 export const metadata = {
@@ -7,5 +8,5 @@ export const metadata = {
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
-  return <html lang="de"><body>{children}</body></html>;
+  return <html lang="de"><body><nav className="app-nav"><Link href="/">Dashboard</Link><Link href="/vouchers">Gutscheine</Link><Link href="/import">Erfassen</Link></nav>{children}</body></html>;
 }

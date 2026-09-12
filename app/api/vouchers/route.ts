@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
 import { voucherExtractionSchema } from '@/lib/extraction';
 import { requireUserId } from '@/lib/request-user';
-import { listActiveVouchers, saveReviewedVoucher } from '@/lib/voucher-repository';
+import { listActiveVouchers, listExpiredVouchers, saveReviewedVoucher } from '@/lib/voucher-repository';
 
 export async function GET(request: Request) {
   try {
     const userId = await requireUserId(request);
-    const vouchers = await listActiveVouchers(userId);
+    const vouchers = new URL(request.url).searchParams.get('scope') === 'expired' ? await listExpiredVouchers(userId) : await listActiveVouchers(userId);
     return NextResponse.json({ vouchers });
   } catch (error) {
     return NextResponse.json(

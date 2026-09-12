@@ -33,7 +33,7 @@ export default function OpportunitiesPage() {
             <strong>{item.merchantName}: {item.title}</strong>
             <div className="muted">{item.reason.join(' · ')}</div>
             {item.startsAt && <div className="muted">Termin: {new Date(item.startsAt).toLocaleDateString('de-DE')}</div>}
-            {item.sourceUrl && <div><a href={item.sourceUrl}>Quelle öffnen</a></div>}
+            {item.sourceUrl && <div><a href={item.sourceUrl} target="_blank" rel="noreferrer">Quelle öffnen</a></div>}
           </div>
           <div className="metric">{item.relevanceScore}</div>
         </div>

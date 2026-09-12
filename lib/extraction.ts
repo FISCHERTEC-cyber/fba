@@ -42,6 +42,15 @@ export function reviewFlags(extraction: VoucherExtraction, threshold = 0.82): Re
   if (extraction.confidence.overall < threshold) {
     flags.unshift({ field: '_overall', confidence: extraction.confidence.overall, reason: 'Gesamterkennung muss bestätigt werden' });
   }
+  if (!extraction.code && !flags.some(flag => flag.field === 'code')) {
+    flags.push({ field: 'code', confidence: 0, reason: 'Kein Gutscheincode erkannt. Bitte Code eintragen oder bestätigen, dass keiner vorhanden ist.' });
+  }
+  if (extraction.kind === 'VALUE' && extraction.valueAmount == null && !flags.some(flag => flag.field === 'valueAmount')) {
+    flags.push({ field: 'valueAmount', confidence: 0, reason: 'Für einen Wertgutschein wurde kein Betrag erkannt.' });
+  }
+  if (!extraction.validUntil && !flags.some(flag => flag.field === 'validUntil')) {
+    flags.push({ field: 'validUntil', confidence: 0, reason: 'Kein Ablaufdatum erkannt. Bitte Datum eintragen oder unbefristete Gültigkeit bestätigen.' });
+  }
   return flags;
 }
 

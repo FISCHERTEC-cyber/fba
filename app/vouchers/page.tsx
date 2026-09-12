@@ -23,6 +23,7 @@ type Voucher = {
 
 export default function VouchersPage() {
   const [vouchers, setVouchers] = useState<Voucher[]>([]);
+  const [expired, setExpired] = useState<Voucher[]>([]);
   const [amounts, setAmounts] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState('');
   const [error, setError] = useState('');
@@ -34,6 +35,8 @@ export default function VouchersPage() {
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error ?? 'Gutscheine konnten nicht geladen werden.');
       setVouchers(payload.vouchers);
+      const archiveResponse = await fetch('/api/vouchers?scope=expired', { cache: 'no-store' });
+      if (archiveResponse.ok) setExpired((await archiveResponse.json()).vouchers);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Gutscheine konnten nicht geladen werden.');
     }
@@ -96,6 +99,7 @@ export default function VouchersPage() {
       })}
       {!vouchers.length && !error && <div className="card empty-state"><h2>Keine aktiven Gutscheine</h2><p className="muted">Erfasste Gutscheine erscheinen hier.</p></div>}
     </section>
+    {expired.length > 0 && <section className="list section-gap"><h2>Abgelaufene Gutscheine</h2>{expired.map(voucher => <article className="card" key={voucher.id}><strong>{voucher.merchantName}: {voucher.title}</strong><div className="muted">Abgelaufen am {formatDate(voucher.validUntil)}</div></article>)}</section>}
   </main>;
 }
 
