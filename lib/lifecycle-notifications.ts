@@ -79,7 +79,6 @@ async function supersedeObsoleteLifecycleNotifications(
   if (!obsoleteEvents.length) return;
   await transaction.notification.updateMany({
     where: {
-      userId: input.userId,
       eventType: { in: obsoleteEvents },
       ...(input.transferId ? { transferId: input.transferId } : {}),
       ...(input.reservationId ? { reservationId: input.reservationId } : {}),
