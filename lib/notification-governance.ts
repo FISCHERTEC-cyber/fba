@@ -11,6 +11,16 @@ export type LifecycleNotificationEvent =
 
 export type NotificationEventFamily = 'RESERVATION' | 'TRANSFER' | 'PERMISSION' | 'CONFLICT' | 'FAMILY_COORDINATION';
 export type NotificationPriority = 'INFORMATIONAL' | 'NORMAL' | 'TIME_SENSITIVE' | 'ACTION_BLOCKING';
+export type LifecycleDeliveryChannel = 'IN_APP' | 'EMAIL' | 'PUSH';
+
+export interface LifecycleNotificationPreference {
+  inAppEnabled?: boolean;
+  emailEnabled?: boolean;
+  pushEnabled?: boolean;
+  quietHoursStart?: number | null;
+  quietHoursEnd?: number | null;
+  timeZone?: string | null;
+}
 
 const FORBIDDEN_PAYLOAD_KEYS = new Set([
   'code', 'pin', 'qrPayload', 'barcode', 'qr', 'voucherCode', 'securityCode'
@@ -28,9 +38,10 @@ export function sanitizeNotificationPayload(input: Record<string, unknown> = {})
 export function lifecycleNotificationDedupeKey(
   event: LifecycleNotificationEvent,
   entityId: string,
-  userId: string
+  userId: string,
+  channel: LifecycleDeliveryChannel = 'IN_APP'
 ) {
-  return `lifecycle:${event}:${entityId}:${userId}`;
+  return `lifecycle:${event}:${entityId}:${userId}:${channel}`;
 }
 
 export function lifecycleEventFamily(event: LifecycleNotificationEvent): NotificationEventFamily {
@@ -44,7 +55,7 @@ export function lifecyclePriority(event: LifecycleNotificationEvent): Notificati
 }
 
 export function lifecycleAllowsEmail(event: LifecycleNotificationEvent) {
-  // Reservierungswarnungen sind kurzfristig und werden nie per E-Mail versendet.
+  // Reservierungsereignisse sind kurzfristig bzw. in der App unmittelbar sichtbar.
   return !event.startsWith('RESERVATION_');
 }
 
@@ -85,6 +96,63 @@ export function obsoleteLifecycleEventsFor(event: LifecycleNotificationEvent): L
       return ['TRANSFER_EXPIRING'];
     default:
       return [];
+  }
+}
+
+export function decideLifecycleDelivery(
+  event: LifecycleNotificationEvent,
+  preference: LifecycleNotificationPreference | null | undefined,
+  now = new Date()
+) {
+  // Lifecycle-Zustände bleiben mindestens in-app sichtbar, damit das Produkt keine
+  // fachlich relevante Zustandsinformation durch eine Kanalpräferenz verliert.
+  const channels: LifecycleDeliveryChannel[] = ['IN_APP'];
+  const suppressed: Array<{ channel: LifecycleDeliveryChannel; reason: string }> = [];
+  const quiet = isWithinQuietHours(now, preference?.timeZone ?? 'Europe/Berlin', preference?.quietHoursStart, preference?.quietHoursEnd);
+
+  if (preference?.emailEnabled && lifecycleAllowsEmail(event)) {
+    if (quiet) suppressed.push({ channel: 'EMAIL', reason: 'QUIET_HOURS' });
+    else channels.push('EMAIL');
+  } else if (preference?.emailEnabled && !lifecycleAllowsEmail(event)) {
+    suppressed.push({ channel: 'EMAIL', reason: 'EVENT_NOT_EMAIL_ELIGIBLE' });
+  }
+
+  // Push ist fachlich entscheidbar, aber wird erst erzeugt, wenn ein Push-Transport
+  // vorhanden ist. Dadurch wird keine Zustellung vorgetäuscht.
+  if (preference?.pushEnabled) {
+    if (quiet) suppressed.push({ channel: 'PUSH', reason: 'QUIET_HOURS' });
+    else suppressed.push({ channel: 'PUSH', reason: 'PUSH_TRANSPORT_UNAVAILABLE' });
+  }
+
+  return { channels, suppressed, priority: lifecyclePriority(event) };
+}
+
+export function isWithinQuietHours(
+  now: Date,
+  timeZone: string,
+  startMinutes?: number | null,
+  endMinutes?: number | null
+) {
+  if (startMinutes == null || endMinutes == null || startMinutes === endMinutes) return false;
+  const current = localMinutes(now, timeZone);
+  return startMinutes < endMinutes
+    ? current >= startMinutes && current < endMinutes
+    : current >= startMinutes || current < endMinutes;
+}
+
+function localMinutes(now: Date, timeZone: string) {
+  try {
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone,
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23'
+    }).formatToParts(now);
+    const hour = Number(parts.find(part => part.type === 'hour')?.value ?? 0);
+    const minute = Number(parts.find(part => part.type === 'minute')?.value ?? 0);
+    return hour * 60 + minute;
+  } catch {
+    return now.getUTCHours() * 60 + now.getUTCMinutes();
   }
 }
 
