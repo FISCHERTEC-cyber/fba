@@ -106,6 +106,13 @@ export async function reconcileLifecycleWarnings(now = new Date()) {
     for (const reservation of reservations) {
       if (reservation.expiresAt <= now) {
         await transaction.benefitReservation.update({ where: { id: reservation.id }, data: { status: 'EXPIRED' } });
+        await transaction.benefitAuditEvent.create({
+          data: {
+            voucherId: reservation.voucherId,
+            action: 'EXPIRED',
+            details: { reservationId: reservation.id, reason: 'RESERVATION_EXPIRED' }
+          }
+        });
         await emitLifecycleNotification(transaction, {
           event: 'RESERVATION_EXPIRED', userId: reservation.userId, voucherId: reservation.voucherId,
           reservationId: reservation.id, merchantName: reservation.voucher.merchantName
@@ -125,6 +132,13 @@ export async function reconcileLifecycleWarnings(now = new Date()) {
     for (const transfer of transfers) {
       if (transfer.expiresAt && transfer.expiresAt <= now) {
         await transaction.benefitTransfer.update({ where: { id: transfer.id }, data: { status: 'EXPIRED' } });
+        await transaction.benefitAuditEvent.create({
+          data: {
+            voucherId: transfer.voucherId,
+            action: 'EXPIRED',
+            details: { transferId: transfer.id, reason: 'TRANSFER_EXPIRED' }
+          }
+        });
         await transaction.notification.updateMany({
           where: { transferId: transfer.id, eventType: 'TRANSFER_EXPIRING', deliveryStatus: { in: ['PENDING', 'PROCESSING', 'DELIVERED'] } },
           data: { deliveryStatus: 'SUPERSEDED' }
