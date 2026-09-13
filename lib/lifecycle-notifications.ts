@@ -1,5 +1,6 @@
 import type { Prisma } from '@prisma/client';
 import {
+  decideLifecycleDelivery,
   lifecycleEventFamily,
   lifecycleNotificationDedupeKey,
   lifecycleNotificationText,
@@ -36,39 +37,57 @@ export async function emitLifecycleNotification(
     reservationId: input.reservationId ?? undefined,
     ...input.payload
   });
+  const eventFamily = lifecycleEventFamily(input.event);
+  const [preference, recipient] = await Promise.all([
+    transaction.notificationPreference.findUnique({
+      where: { userId_eventFamily: { userId: input.userId, eventFamily } }
+    }),
+    transaction.user.findUnique({ where: { id: input.userId }, select: { email: true } })
+  ]);
+  const decision = decideLifecycleDelivery(input.event, preference);
 
   await supersedeObsoleteLifecycleNotifications(transaction, input);
 
-  return transaction.notification.upsert({
-    where: { dedupeKey: lifecycleNotificationDedupeKey(input.event, entityId, input.userId) },
-    create: {
-      userId: input.userId,
-      voucherId: input.voucherId,
-      transferId: input.transferId ?? null,
-      reservationId: input.reservationId ?? null,
-      eventType: input.event,
-      eventFamily: lifecycleEventFamily(input.event),
-      priority: lifecyclePriority(input.event),
-      kind: 'LIFECYCLE',
-      channel: 'IN_APP',
-      deliveryStatus: 'DELIVERED',
-      dedupeKey: lifecycleNotificationDedupeKey(input.event, entityId, input.userId),
-      title: text.title,
-      body: text.body,
-      payload,
-      expiresAt: input.expiresAt ?? null,
-      deliveredAt: new Date()
-    },
-    update: {
-      title: text.title,
-      body: text.body,
-      payload,
-      priority: lifecyclePriority(input.event),
-      expiresAt: input.expiresAt ?? null,
-      deliveryStatus: 'DELIVERED',
-      dismissedAt: null
-    }
-  });
+  const notifications = [];
+  for (const channel of decision.channels) {
+    if (channel === 'PUSH') continue;
+    const dedupeKey = lifecycleNotificationDedupeKey(input.event, entityId, input.userId, channel);
+    notifications.push(await transaction.notification.upsert({
+      where: { dedupeKey },
+      create: {
+        userId: input.userId,
+        voucherId: input.voucherId,
+        transferId: input.transferId ?? null,
+        reservationId: input.reservationId ?? null,
+        eventType: input.event,
+        eventFamily,
+        priority: lifecyclePriority(input.event),
+        kind: 'LIFECYCLE',
+        channel,
+        deliveryStatus: channel === 'IN_APP' ? 'DELIVERED' : 'PENDING',
+        dedupeKey,
+        title: text.title,
+        body: text.body,
+        payload,
+        recipient: channel === 'EMAIL' ? recipient?.email ?? null : null,
+        expiresAt: input.expiresAt ?? null,
+        nextAttemptAt: channel === 'EMAIL' ? new Date() : null,
+        deliveredAt: channel === 'IN_APP' ? new Date() : null
+      },
+      update: {
+        title: text.title,
+        body: text.body,
+        payload,
+        priority: lifecyclePriority(input.event),
+        expiresAt: input.expiresAt ?? null,
+        recipient: channel === 'EMAIL' ? recipient?.email ?? null : null,
+        deliveryStatus: channel === 'IN_APP' ? 'DELIVERED' : 'PENDING',
+        nextAttemptAt: channel === 'EMAIL' ? new Date() : null,
+        dismissedAt: null
+      }
+    }));
+  }
+  return { notifications, suppressed: decision.suppressed };
 }
 
 async function supersedeObsoleteLifecycleNotifications(
