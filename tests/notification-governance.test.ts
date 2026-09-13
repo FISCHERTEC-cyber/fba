@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  decideLifecycleDelivery,
   lifecycleAllowsEmail,
   lifecycleNotificationDedupeKey,
   lifecycleNotificationText,
@@ -21,7 +22,7 @@ test('sensible Gutscheinwerte werden aus Notification-Payloads entfernt', () => 
   }), { voucherId: 'v1', transferId: 't1' });
 });
 
-test('Lifecycle-Deduplizierung ist semantisch stabil', () => {
+test('Lifecycle-Deduplizierung ist semantisch und kanalbezogen stabil', () => {
   assert.equal(
     lifecycleNotificationDedupeKey('TRANSFER_CREATED', 't1', 'u2'),
     lifecycleNotificationDedupeKey('TRANSFER_CREATED', 't1', 'u2')
@@ -29,6 +30,10 @@ test('Lifecycle-Deduplizierung ist semantisch stabil', () => {
   assert.notEqual(
     lifecycleNotificationDedupeKey('TRANSFER_CREATED', 't1', 'u2'),
     lifecycleNotificationDedupeKey('TRANSFER_ACCEPTED', 't1', 'u2')
+  );
+  assert.notEqual(
+    lifecycleNotificationDedupeKey('TRANSFER_CREATED', 't1', 'u2', 'IN_APP'),
+    lifecycleNotificationDedupeKey('TRANSFER_CREATED', 't1', 'u2', 'EMAIL')
   );
 });
 
@@ -49,4 +54,26 @@ test('Lifecycle-Texte enthalten keine Codes oder PINs', () => {
   const text = lifecycleNotificationText('TRANSFER_CREATED', 'IKEA');
   assert.match(text.body, /IKEA/);
   assert.doesNotMatch(`${text.title} ${text.body}`, /code|pin|qr|barcode/i);
+});
+
+test('Quiet Hours unterdrücken externe Transfer-Kanäle, In-App bleibt erhalten', () => {
+  const decision = decideLifecycleDelivery('TRANSFER_CREATED', {
+    emailEnabled: true,
+    pushEnabled: true,
+    quietHoursStart: 22 * 60,
+    quietHoursEnd: 7 * 60,
+    timeZone: 'Europe/Berlin'
+  }, new Date('2026-09-13T21:30:00Z'));
+  assert.deepEqual(decision.channels, ['IN_APP']);
+  assert.deepEqual(decision.suppressed.map(item => item.reason), ['QUIET_HOURS', 'QUIET_HOURS']);
+});
+
+test('Transfer-E-Mail kann außerhalb der Ruhezeit freigegeben werden', () => {
+  const decision = decideLifecycleDelivery('TRANSFER_CREATED', {
+    emailEnabled: true,
+    quietHoursStart: 22 * 60,
+    quietHoursEnd: 7 * 60,
+    timeZone: 'Europe/Berlin'
+  }, new Date('2026-09-13T12:00:00Z'));
+  assert.deepEqual(decision.channels, ['IN_APP', 'EMAIL']);
 });
