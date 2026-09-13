@@ -36,7 +36,7 @@ export async function emitLifecycleNotification(
     transferId: input.transferId ?? undefined,
     reservationId: input.reservationId ?? undefined,
     ...input.payload
-  });
+  }) as Prisma.InputJsonValue;
   const eventFamily = lifecycleEventFamily(input.event);
   const [preference, recipient] = await Promise.all([
     transaction.notificationPreference.findUnique({
