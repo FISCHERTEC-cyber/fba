@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireNotificationJobToken } from '@/lib/job-auth';
 import { createEmailDeliveryAdapterFromEnv } from '@/lib/notification-delivery';
 import { dispatchDueEmailNotifications } from '@/lib/notification-delivery-service';
+import { reconcileLifecycleWarnings } from '@/lib/lifecycle-notifications';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -13,11 +14,12 @@ export async function POST(request: Request) {
     if (body.limit != null && (!Number.isFinite(body.limit) || body.limit < 1 || body.limit > 50)) {
       throw new Error('limit muss zwischen 1 und 50 liegen.');
     }
-    const result = await dispatchDueEmailNotifications(
+    const lifecycle = await reconcileLifecycleWarnings();
+    const delivery = await dispatchDueEmailNotifications(
       createEmailDeliveryAdapterFromEnv(),
       { limit: body.limit }
     );
-    return NextResponse.json(result);
+    return NextResponse.json({ lifecycle, delivery });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Benachrichtigungsversand fehlgeschlagen';
     const status = message.includes('autorisiert') ? 401 : message.includes('nicht konfiguriert') ? 503 : 400;

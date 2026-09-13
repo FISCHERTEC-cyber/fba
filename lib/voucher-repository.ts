@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from './prisma';
 import { decideRedemption } from './redemption';
 import { canRedeemFamilyVoucher } from './family-wallet-policy';
+import { emitLifecycleNotification } from './lifecycle-notifications';
 
 export interface SaveReviewedVoucherInput {
   userId: string;
@@ -23,28 +24,28 @@ export function assertExtractionReviewed(extraction: VoucherExtraction, confirme
 export function reviewedVoucherData(userId: string, extraction: VoucherExtraction) {
   if (!userId) throw new Error('userId fehlt.');
   return {
-      userId,
-      merchantName: extraction.merchantName,
-      title: extraction.title,
-      kind: extraction.kind,
-      valueAmount: extraction.valueAmount,
-      currency: extraction.currency,
-      discountPercent: extraction.discountPercent,
-      code: extraction.code,
-      barcode: extraction.barcode,
-      qrPayload: extraction.qrPayload,
-      validFrom: extraction.validFrom ? new Date(extraction.validFrom) : undefined,
-      validUntil: extraction.validUntil ? new Date(extraction.validUntil) : undefined,
-      minimumOrderValue: extraction.minimumOrderValue,
-      redemptionUrl: extraction.redemptionUrl,
-      terms: extraction.terms,
-      physicalVoucher: extraction.physicalVoucher,
-      storageLocation: extraction.storageLocation,
-      lastLocationUpdate: extraction.storageLocation ? new Date() : undefined,
-      eventMonitoringEnabled: extraction.eventMonitoringEnabled,
-      extractionConfidence: extraction.confidence.overall,
-      sourceType: extraction.sourceType,
-      sourceReference: extraction.sourceReference
+    userId,
+    merchantName: extraction.merchantName,
+    title: extraction.title,
+    kind: extraction.kind,
+    valueAmount: extraction.valueAmount,
+    currency: extraction.currency,
+    discountPercent: extraction.discountPercent,
+    code: extraction.code,
+    barcode: extraction.barcode,
+    qrPayload: extraction.qrPayload,
+    validFrom: extraction.validFrom ? new Date(extraction.validFrom) : undefined,
+    validUntil: extraction.validUntil ? new Date(extraction.validUntil) : undefined,
+    minimumOrderValue: extraction.minimumOrderValue,
+    redemptionUrl: extraction.redemptionUrl,
+    terms: extraction.terms,
+    physicalVoucher: extraction.physicalVoucher,
+    storageLocation: extraction.storageLocation,
+    lastLocationUpdate: extraction.storageLocation ? new Date() : undefined,
+    eventMonitoringEnabled: extraction.eventMonitoringEnabled,
+    extractionConfidence: extraction.confidence.overall,
+    sourceType: extraction.sourceType,
+    sourceReference: extraction.sourceReference
   };
 }
 
@@ -198,7 +199,15 @@ export async function reserveVoucher(userId: string, voucherId: string, expiresI
   }
 
   return prisma.$transaction(async transaction => {
-    const voucher = await findAccessibleVoucher(voucherId, userId);
+    const voucher = await transaction.voucher.findFirst({
+      where: {
+        id: voucherId,
+        OR: [
+          { userId },
+          { wallet: { members: { some: { userId, role: { in: ['OWNER', 'MEMBER'] } } } } }
+        ]
+      }
+    });
     if (!voucher || voucher.status !== 'ACTIVE') throw new Error('Gutschein ist nicht reservierbar.');
     const now = new Date();
     await transaction.benefitReservation.updateMany({
@@ -218,17 +227,27 @@ export async function reserveVoucher(userId: string, voucherId: string, expiresI
       data: { voucherId, userId, expiresAt: new Date(now.getTime() + expiresInMinutes * 60_000) }
     });
     await transaction.benefitAuditEvent.create({ data: { voucherId, actorUserId: userId, action: 'RESERVED', details: { expiresAt: reservation.expiresAt } } });
+    await emitLifecycleNotification(transaction, {
+      event: 'RESERVATION_CREATED', userId, voucherId, reservationId: reservation.id,
+      merchantName: voucher.merchantName, expiresAt: reservation.expiresAt
+    });
     return reservation;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
 export async function releaseVoucherReservation(userId: string, voucherId: string) {
   return prisma.$transaction(async transaction => {
-    const result = await transaction.benefitReservation.updateMany({
-      where: { voucherId, userId, status: 'ACTIVE' }, data: { status: 'RELEASED' }
+    const reservation = await transaction.benefitReservation.findFirst({
+      where: { voucherId, userId, status: 'ACTIVE' },
+      include: { voucher: { select: { merchantName: true } } }
     });
-    if (!result.count) throw new Error('Keine aktive eigene Reservierung vorhanden.');
+    if (!reservation) throw new Error('Keine aktive eigene Reservierung vorhanden.');
+    await transaction.benefitReservation.update({ where: { id: reservation.id }, data: { status: 'RELEASED' } });
     await transaction.benefitAuditEvent.create({ data: { voucherId, actorUserId: userId, action: 'RELEASED' } });
+    await emitLifecycleNotification(transaction, {
+      event: 'RESERVATION_RELEASED', userId, voucherId, reservationId: reservation.id,
+      merchantName: reservation.voucher.merchantName
+    });
   });
 }
 
@@ -246,44 +265,65 @@ export async function startVoucherTransfer(senderUserId: string, voucherId: stri
     if (existing) throw new Error('Für diesen Gutschein läuft bereits eine Übertragung.');
     const transfer = await transaction.benefitTransfer.create({ data: { voucherId, senderUserId, recipientUserId, expiresAt: new Date(Date.now() + expiresInHours * 3_600_000) } });
     await transaction.benefitAuditEvent.create({ data: { voucherId, actorUserId: senderUserId, action: 'TRANSFER_STARTED', details: { transferId: transfer.id, recipientUserId, expiresAt: transfer.expiresAt } } });
+    await emitLifecycleNotification(transaction, {
+      event: 'TRANSFER_CREATED', userId: recipientUserId, voucherId, transferId: transfer.id,
+      merchantName: voucher.merchantName, expiresAt: transfer.expiresAt
+    });
     return transfer;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
 export async function cancelVoucherTransfer(senderUserId: string, transferId: string) {
   return prisma.$transaction(async transaction => {
-    const transfer = await transaction.benefitTransfer.findFirst({ where: { id: transferId, senderUserId, status: 'PENDING' } });
+    const transfer = await transaction.benefitTransfer.findFirst({
+      where: { id: transferId, senderUserId, status: 'PENDING' },
+      include: { voucher: { select: { merchantName: true } } }
+    });
     if (!transfer) throw new Error('Keine offene eigene Übertragung gefunden.');
     await transaction.benefitTransfer.update({ where: { id: transfer.id }, data: { status: 'CANCELLED' } });
     await transaction.benefitAuditEvent.create({ data: { voucherId: transfer.voucherId, actorUserId: senderUserId, action: 'TRANSFER_CANCELLED', details: { transferId } } });
+    if (transfer.recipientUserId) {
+      await emitLifecycleNotification(transaction, {
+        event: 'TRANSFER_WITHDRAWN', userId: transfer.recipientUserId, voucherId: transfer.voucherId,
+        transferId: transfer.id, merchantName: transfer.voucher.merchantName
+      });
+    }
   });
 }
 
 export async function acceptVoucherTransfer(recipientUserId: string, transferId: string) {
   return prisma.$transaction(async transaction => {
-    const transfer = await transaction.benefitTransfer.findFirst({ where: { id: transferId, recipientUserId, status: 'PENDING' } });
+    const transfer = await transaction.benefitTransfer.findFirst({
+      where: { id: transferId, recipientUserId, status: 'PENDING' },
+      include: { voucher: { select: { merchantName: true } } }
+    });
     if (!transfer) throw new Error('Keine offene Übertragung für diesen Nutzer gefunden.');
-    if (transfer.expiresAt && transfer.expiresAt <= new Date()) {
-      await transaction.benefitTransfer.update({ where: { id: transfer.id }, data: { status: 'EXPIRED' } });
-      throw new Error('Die Übertragung ist abgelaufen.');
-    }
+    if (transfer.expiresAt && transfer.expiresAt <= new Date()) throw new Error('Die Übertragung ist abgelaufen.');
     await transaction.voucher.update({ where: { id: transfer.voucherId }, data: { userId: recipientUserId, walletId: null } });
     const accepted = await transaction.benefitTransfer.update({ where: { id: transfer.id }, data: { status: 'ACCEPTED' } });
     await transaction.benefitAuditEvent.create({ data: { voucherId: transfer.voucherId, actorUserId: recipientUserId, action: 'TRANSFER_ACCEPTED', details: { transferId } } });
+    await emitLifecycleNotification(transaction, {
+      event: 'TRANSFER_ACCEPTED', userId: transfer.senderUserId, voucherId: transfer.voucherId,
+      transferId: transfer.id, merchantName: transfer.voucher.merchantName
+    });
     return accepted;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
 export async function declineVoucherTransfer(recipientUserId: string, transferId: string) {
   return prisma.$transaction(async transaction => {
-    const transfer = await transaction.benefitTransfer.findFirst({ where: { id: transferId, recipientUserId, status: 'PENDING' } });
+    const transfer = await transaction.benefitTransfer.findFirst({
+      where: { id: transferId, recipientUserId, status: 'PENDING' },
+      include: { voucher: { select: { merchantName: true } } }
+    });
     if (!transfer) throw new Error('Keine offene Übertragung für diesen Nutzer gefunden.');
-    if (transfer.expiresAt && transfer.expiresAt <= new Date()) {
-      await transaction.benefitTransfer.update({ where: { id: transfer.id }, data: { status: 'EXPIRED' } });
-      throw new Error('Die Übertragung ist abgelaufen.');
-    }
+    if (transfer.expiresAt && transfer.expiresAt <= new Date()) throw new Error('Die Übertragung ist abgelaufen.');
     await transaction.benefitTransfer.update({ where: { id: transfer.id }, data: { status: 'CANCELLED' } });
     await transaction.benefitAuditEvent.create({ data: { voucherId: transfer.voucherId, actorUserId: recipientUserId, action: 'TRANSFER_CANCELLED', details: { transferId, declined: true } } });
+    await emitLifecycleNotification(transaction, {
+      event: 'TRANSFER_DECLINED', userId: transfer.senderUserId, voucherId: transfer.voucherId,
+      transferId: transfer.id, merchantName: transfer.voucher.merchantName
+    });
   });
 }
 
