@@ -1,0 +1,16 @@
+CREATE TYPE "BenefitReservationStatus" AS ENUM ('ACTIVE', 'RELEASED', 'EXPIRED');
+CREATE TYPE "BenefitTransferStatus" AS ENUM ('PENDING', 'ACCEPTED', 'CANCELLED', 'EXPIRED');
+CREATE TYPE "BenefitAuditAction" AS ENUM ('RESERVED', 'RELEASED', 'TRANSFER_STARTED', 'TRANSFER_CANCELLED', 'TRANSFER_ACCEPTED', 'REDEEMED', 'EXPIRED', 'ARCHIVED');
+CREATE TABLE "BenefitReservation" ("id" TEXT NOT NULL, "voucherId" TEXT NOT NULL, "userId" TEXT NOT NULL, "status" "BenefitReservationStatus" NOT NULL DEFAULT 'ACTIVE', "expiresAt" TIMESTAMP(3) NOT NULL, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, CONSTRAINT "BenefitReservation_pkey" PRIMARY KEY ("id"));
+CREATE TABLE "BenefitTransfer" ("id" TEXT NOT NULL, "voucherId" TEXT NOT NULL, "senderUserId" TEXT NOT NULL, "recipientUserId" TEXT, "status" "BenefitTransferStatus" NOT NULL DEFAULT 'PENDING', "expiresAt" TIMESTAMP(3), "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, CONSTRAINT "BenefitTransfer_pkey" PRIMARY KEY ("id"));
+CREATE TABLE "BenefitAuditEvent" ("id" TEXT NOT NULL, "voucherId" TEXT NOT NULL, "actorUserId" TEXT, "action" "BenefitAuditAction" NOT NULL, "details" JSONB, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, CONSTRAINT "BenefitAuditEvent_pkey" PRIMARY KEY ("id"));
+CREATE INDEX "BenefitReservation_voucherId_status_expiresAt_idx" ON "BenefitReservation"("voucherId", "status", "expiresAt");
+CREATE INDEX "BenefitTransfer_voucherId_status_idx" ON "BenefitTransfer"("voucherId", "status");
+CREATE INDEX "BenefitAuditEvent_voucherId_createdAt_idx" ON "BenefitAuditEvent"("voucherId", "createdAt");
+ALTER TABLE "BenefitReservation" ADD CONSTRAINT "BenefitReservation_voucherId_fkey" FOREIGN KEY ("voucherId") REFERENCES "Voucher"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "BenefitReservation" ADD CONSTRAINT "BenefitReservation_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "BenefitTransfer" ADD CONSTRAINT "BenefitTransfer_voucherId_fkey" FOREIGN KEY ("voucherId") REFERENCES "Voucher"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "BenefitTransfer" ADD CONSTRAINT "BenefitTransfer_senderUserId_fkey" FOREIGN KEY ("senderUserId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "BenefitTransfer" ADD CONSTRAINT "BenefitTransfer_recipientUserId_fkey" FOREIGN KEY ("recipientUserId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "BenefitAuditEvent" ADD CONSTRAINT "BenefitAuditEvent_voucherId_fkey" FOREIGN KEY ("voucherId") REFERENCES "Voucher"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "BenefitAuditEvent" ADD CONSTRAINT "BenefitAuditEvent_actorUserId_fkey" FOREIGN KEY ("actorUserId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
