@@ -71,6 +71,15 @@ label { display:block; margin:10px 0 6px; font-size:14px; font-weight:600; }
 .invitation-box { display:flex; justify-content:space-between; align-items:center; gap:16px; border-color:#a5b4fc; }
 .invitation-box p { margin-bottom:0; }
 .pending-invitation { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:10px; }
+.detail-shell { max-width:760px; }
+.action-stack { display:grid; gap:12px; align-items:start; }
+.audit-list { display:grid; gap:10px; padding-left:20px; }
+.audit-list li { display:grid; gap:3px; }
+.audit-list span { color:#6b7280; font-size:14px; }
+.action-inbox-list { display:grid; gap:12px; }
+.action-inbox-list .card { display:flex; justify-content:space-between; gap:20px; align-items:start; }
+.nav-badge { display:inline-grid; min-width:18px; height:18px; margin-left:6px; padding:0 4px; place-items:center; border-radius:999px; background:#b91c1c; color:white; font-size:12px; line-height:1; }
+@media (max-width: 640px) { .action-inbox-list .card { flex-direction:column; } .action-inbox-list .action-stack { width:100%; } }
 
 @media (max-width: 680px) {
   .form-grid { grid-template-columns:1fr; }

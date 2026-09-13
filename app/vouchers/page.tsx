@@ -81,7 +81,7 @@ export default function VouchersPage() {
         return <article className="card" key={voucher.id}>
           <div className="row wrap-row">
             <div>
-              <h2>{voucher.merchantName}: {voucher.title}</h2>
+              <h2><Link href={`/vouchers/${voucher.id}`}>{voucher.merchantName}: {voucher.title}</Link></h2>
               <div className="muted">Gültig bis {formatDate(voucher.validUntil)}</div>
               {voucher.wallet && <div className="wallet-note">Familien-Wallet: {voucher.wallet.name}{!voucher.owned ? ` · ${voucher.accessRole === 'VIEWER' ? 'nur ansehen' : 'gemeinsam nutzbar'}` : ''}</div>}
               {voucher.physicalVoucher && <div className="storage-note">Original: {voucher.storageLocation || 'Aufbewahrungsort nicht erfasst'}</div>}
@@ -90,6 +90,7 @@ export default function VouchersPage() {
               ? formatMoney(voucher.remainingAmount!, voucher.currency)
               : voucher.discountPercent ? `${Number(voucher.discountPercent)} %` : kindLabel(voucher.kind)}</div>
           </div>
+          <Link className="button-link button-secondary section-gap-small" href={`/vouchers/${voucher.id}`}>Details und Aktionen</Link>
           {voucher.canRedeem ? <div className="redemption-row section-gap-small">
             {monetary && <input aria-label={`Teilbetrag für ${voucher.title}`} inputMode="decimal" placeholder="Teilbetrag in EUR" value={amounts[voucher.id] ?? ''} onChange={event => setAmounts(current => ({ ...current, [voucher.id]: event.target.value }))} />}
             {monetary && <button className="button-secondary" disabled={busyId === voucher.id} onClick={() => redeem(voucher, false)}>Teilbetrag abbuchen</button>}

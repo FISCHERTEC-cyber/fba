@@ -86,6 +86,34 @@ enum BenefitAuditAction {
   ARCHIVED
 }
 
+enum BenefitActionType {
+  ACCEPT_TRANSFER
+  DECLINE_TRANSFER
+  RELEASE_RESERVATION
+  RESERVATION_EXPIRING
+  TRANSFER_EXPIRING
+  REVIEW_CONFLICT
+  REVIEW_PERMISSION_CHANGE
+  RETRY_FAILED_ACTION
+  ACKNOWLEDGE_COMPLETED_TRANSFER
+}
+
+enum BenefitActionPriority {
+  CRITICAL
+  HIGH
+  NORMAL
+  LOW
+}
+
+enum BenefitActionStatus {
+  OPEN
+  SNOOZED
+  COMPLETED
+  EXPIRED
+  DISMISSED
+  SUPERSEDED
+}
+
 model User {
   id                        String                   @id @default(cuid())
   email                     String                   @unique
@@ -104,6 +132,7 @@ model User {
   benefitTransfersSent      BenefitTransfer[]        @relation("BenefitTransferSender")
   benefitTransfersReceived  BenefitTransfer[]        @relation("BenefitTransferRecipient")
   benefitAuditEvents        BenefitAuditEvent[]
+  benefitActionItems        BenefitActionItem[]
   createdAt                 DateTime                 @default(now())
 }
 
@@ -242,6 +271,7 @@ model Voucher {
   reservations            BenefitReservation[]
   transfers               BenefitTransfer[]
   auditEvents             BenefitAuditEvent[]
+  actionItems             BenefitActionItem[]
   createdAt               DateTime                @default(now())
   updatedAt               DateTime                @updatedAt
 
@@ -287,6 +317,32 @@ model BenefitAuditEvent {
   createdAt   DateTime           @default(now())
 
   @@index([voucherId, createdAt])
+}
+
+model BenefitActionItem {
+  id           String                @id @default(cuid())
+  userId       String
+  user         User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  voucherId    String?
+  voucher      Voucher?              @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  reservationId String?
+  transferId   String?
+  type         BenefitActionType
+  priority     BenefitActionPriority @default(NORMAL)
+  status       BenefitActionStatus   @default(OPEN)
+  dueAt        DateTime?
+  expiresAt    DateTime?
+  snoozedUntil DateTime?
+  completedAt  DateTime?
+  dismissedAt  DateTime?
+  sourceKey    String                @unique
+  payload      Json?
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+
+  @@index([userId, status, dueAt])
+  @@index([transferId])
+  @@index([reservationId])
 }
 
 model VoucherTransaction {

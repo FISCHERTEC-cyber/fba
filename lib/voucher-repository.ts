@@ -274,8 +274,48 @@ export async function acceptVoucherTransfer(recipientUserId: string, transferId:
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
+export async function declineVoucherTransfer(recipientUserId: string, transferId: string) {
+  return prisma.$transaction(async transaction => {
+    const transfer = await transaction.benefitTransfer.findFirst({ where: { id: transferId, recipientUserId, status: 'PENDING' } });
+    if (!transfer) throw new Error('Keine offene Übertragung für diesen Nutzer gefunden.');
+    if (transfer.expiresAt && transfer.expiresAt <= new Date()) {
+      await transaction.benefitTransfer.update({ where: { id: transfer.id }, data: { status: 'EXPIRED' } });
+      throw new Error('Die Übertragung ist abgelaufen.');
+    }
+    await transaction.benefitTransfer.update({ where: { id: transfer.id }, data: { status: 'CANCELLED' } });
+    await transaction.benefitAuditEvent.create({ data: { voucherId: transfer.voucherId, actorUserId: recipientUserId, action: 'TRANSFER_CANCELLED', details: { transferId, declined: true } } });
+  });
+}
+
 export async function listVoucherAudit(userId: string, voucherId: string) {
   const voucher = await findAccessibleVoucher(voucherId, userId);
   if (!voucher) throw new Error('Gutschein wurde nicht gefunden.');
   return prisma.benefitAuditEvent.findMany({ where: { voucherId }, include: { actor: { select: { id: true, email: true } } }, orderBy: { createdAt: 'desc' } });
+}
+
+export async function getVoucherDetail(userId: string, voucherId: string) {
+  const voucher = await prisma.voucher.findFirst({
+    where: { id: voucherId, OR: [{ userId }, { wallet: { members: { some: { userId } } } }] },
+    include: {
+      wallet: { include: { members: { include: { user: { select: { id: true, email: true } } } } } },
+      reservations: { where: { status: 'ACTIVE', expiresAt: { gt: new Date() } }, orderBy: { createdAt: 'desc' }, take: 1, include: { user: { select: { id: true, email: true } } } },
+      transfers: { where: { status: 'PENDING' }, orderBy: { createdAt: 'desc' }, take: 1, include: { sender: { select: { id: true, email: true } }, recipient: { select: { id: true, email: true } } } },
+      auditEvents: { orderBy: { createdAt: 'desc' }, take: 50, include: { actor: { select: { id: true, email: true } } } }
+    }
+  });
+  if (!voucher) throw new Error('Gutschein wurde nicht gefunden.');
+  const reservation = voucher.reservations[0] ?? null;
+  const transfer = voucher.transfers[0] ?? null;
+  const accessRole = voucher.userId === userId ? 'OWNER' : voucher.wallet?.members.find(member => member.userId === userId)?.role ?? 'VIEWER';
+  return {
+    ...voucher,
+    reservation,
+    transfer,
+    accessRole,
+    canReserve: accessRole !== 'VIEWER' && !transfer,
+    canReleaseReservation: reservation?.userId === userId,
+    canTransfer: voucher.userId === userId && !reservation && !transfer,
+    canAcceptTransfer: transfer?.recipientUserId === userId,
+    transferRecipients: voucher.wallet?.members.filter(member => member.userId !== userId).map(member => ({ id: member.user.id, label: member.user.email })) ?? []
+  };
 }
