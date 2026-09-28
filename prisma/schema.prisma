@@ -102,6 +102,46 @@ enum BenefitAuditAction {
   REDEEMED
   EXPIRED
   ARCHIVED
+  CREDENTIAL_CREATED
+  CREDENTIAL_REVEALED
+  OFFLINE_CACHE_ISSUED
+  OFFLINE_CACHE_REVOKED
+}
+
+enum CredentialKind {
+  REDEMPTION_CODE
+  PIN
+  BARCODE
+  QR_PAYLOAD
+  ACCOUNT_NUMBER
+  EXTERNAL_TOKEN
+}
+
+enum CredentialSecretClass {
+  CONFIDENTIAL
+  RESTRICTED
+}
+
+enum DataExportFormat {
+  JSON
+  CSV
+  ZIP
+  PDF
+}
+
+enum DataExportStatus {
+  REQUESTED
+  READY
+  EXPIRED
+  FAILED
+}
+
+enum AccountDeletionStatus {
+  REQUESTED
+  BLOCKED_BY_WALLET_OWNERSHIP
+  SCHEDULED
+  CANCELLED
+  COMPLETED
 }
 
 enum BenefitActionType {
@@ -152,7 +192,62 @@ model User {
   benefitTransfersReceived  BenefitTransfer[]        @relation("BenefitTransferRecipient")
   benefitAuditEvents        BenefitAuditEvent[]
   benefitActionItems        BenefitActionItem[]
+  dataExportRequests        DataExportRequest[]
+  backupProfiles            BackupProfile[]
+  accountDeletionRequests   AccountDeletionRequest[]
   createdAt                 DateTime                 @default(now())
+}
+
+model DataExportRequest {
+  id                    String           @id @default(cuid())
+  userId                String
+  user                  User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  format                DataExportFormat @default(JSON)
+  includeSensitiveData  Boolean          @default(false)
+  includeAuditData      Boolean          @default(true)
+  includeAttachments    Boolean          @default(false)
+  status                DataExportStatus @default(REQUESTED)
+  manifest              Json?
+  payload               Json?
+  checksum              String?
+  downloadTokenHash     String?          @unique
+  downloadExpiresAt     DateTime?
+  completedAt           DateTime?
+  createdAt             DateTime         @default(now())
+
+  @@index([userId, status, createdAt])
+}
+
+model BackupProfile {
+  id                    String           @id @default(cuid())
+  userId                String
+  user                  User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name                  String
+  format                DataExportFormat @default(JSON)
+  includeSensitiveData  Boolean          @default(false)
+  includeAuditData      Boolean          @default(true)
+  retentionDays         Int              @default(30)
+  enabled               Boolean          @default(true)
+  lastSnapshotAt        DateTime?
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+
+  @@unique([userId, name])
+  @@index([userId, enabled])
+}
+
+model AccountDeletionRequest {
+  id           String                @id @default(cuid())
+  userId       String
+  user         User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status       AccountDeletionStatus @default(REQUESTED)
+  executeAfter DateTime?
+  reason       String?
+  createdAt    DateTime              @default(now())
+  cancelledAt  DateTime?
+  completedAt  DateTime?
+
+  @@index([userId, status])
 }
 
 model NotificationPreference {
@@ -229,6 +324,7 @@ model UserDevice {
   lastSeenAt DateTime      @default(now())
   revokedAt  DateTime?
   sessions   UserSession[]
+  offlineCredentialCaches OfflineCredentialCache[]
   createdAt  DateTime      @default(now())
 
   @@unique([userId, tokenHash])
@@ -310,10 +406,52 @@ model Voucher {
   transfers               BenefitTransfer[]
   auditEvents             BenefitAuditEvent[]
   actionItems             BenefitActionItem[]
+  credentials             VoucherCredential[]
+  offlineCredentialCaches OfflineCredentialCache[]
   createdAt               DateTime                @default(now())
   updatedAt               DateTime                @updatedAt
 
   @@index([walletId, status])
+}
+
+model VoucherCredential {
+  id               String                @id @default(cuid())
+  voucherId        String
+  voucher          Voucher               @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  kind             CredentialKind
+  label            String?
+  secretClass      CredentialSecretClass @default(CONFIDENTIAL)
+  encryptedValue   String
+  valueFingerprint String
+  maskedValue      String
+  revealCount      Int                   @default(0)
+  lastRevealedAt   DateTime?
+  revokedAt        DateTime?
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  offlineCaches    OfflineCredentialCache[]
+
+  @@unique([voucherId, valueFingerprint])
+  @@index([voucherId, revokedAt])
+}
+
+model OfflineCredentialCache {
+  id               String             @id @default(cuid())
+  voucherId        String
+  voucher          Voucher            @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  credentialId     String
+  credential       VoucherCredential  @relation(fields: [credentialId], references: [id], onDelete: Cascade)
+  deviceId         String
+  device           UserDevice         @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  encryptedPayload String
+  payloadHash      String
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  createdAt        DateTime           @default(now())
+
+  @@unique([credentialId, deviceId])
+  @@index([deviceId, revokedAt, expiresAt])
+  @@index([voucherId, revokedAt])
 }
 
 model BenefitReservation {

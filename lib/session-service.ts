@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from './prisma';
 import { MAX_DEVICES, newOpaqueToken, SESSION_LEASE_MS, tokenHash } from './session-security';
+import { revokeOfflineCredentialCachesForDevice } from './redemption-wallet-repository';
 
 export { DEVICE_COOKIE, SESSION_COOKIE, cookieValue } from './session-security';
 
@@ -70,7 +71,15 @@ export async function revokeUserDevice(userId: string, deviceId: string, now = n
   return prisma.$transaction(async tx => {
     const device = await tx.userDevice.findFirst({ where: { id: deviceId, userId, revokedAt: null } });
     if (!device) throw new Error('Gerät wurde nicht gefunden.');
+    await revokeOfflineCredentialCachesForDevice(tx, deviceId, userId);
     await tx.userSession.updateMany({ where: { deviceId, revokedAt: null }, data: { revokedAt: now } });
     await tx.userDevice.update({ where: { id: deviceId }, data: { revokedAt: now } });
   });
+}
+
+export async function currentDeviceId(userId: string, sessionToken?: string) {
+  if (!sessionToken) throw new Error('Aktives Gerät konnte nicht bestimmt werden.');
+  const session = await prisma.userSession.findFirst({ where: { userId, tokenHash: tokenHash(sessionToken), revokedAt: null }, select: { deviceId: true } });
+  if (!session) throw new Error('Aktives Gerät konnte nicht bestimmt werden.');
+  return session.deviceId;
 }
