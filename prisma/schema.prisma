@@ -102,6 +102,24 @@ enum BenefitAuditAction {
   REDEEMED
   EXPIRED
   ARCHIVED
+  CREDENTIAL_CREATED
+  CREDENTIAL_REVEALED
+  OFFLINE_CACHE_ISSUED
+  OFFLINE_CACHE_REVOKED
+}
+
+enum CredentialKind {
+  REDEMPTION_CODE
+  PIN
+  BARCODE
+  QR_PAYLOAD
+  ACCOUNT_NUMBER
+  EXTERNAL_TOKEN
+}
+
+enum CredentialSecretClass {
+  CONFIDENTIAL
+  RESTRICTED
 }
 
 enum BenefitActionType {
@@ -229,6 +247,7 @@ model UserDevice {
   lastSeenAt DateTime      @default(now())
   revokedAt  DateTime?
   sessions   UserSession[]
+  offlineCredentialCaches OfflineCredentialCache[]
   createdAt  DateTime      @default(now())
 
   @@unique([userId, tokenHash])
@@ -310,10 +329,52 @@ model Voucher {
   transfers               BenefitTransfer[]
   auditEvents             BenefitAuditEvent[]
   actionItems             BenefitActionItem[]
+  credentials             VoucherCredential[]
+  offlineCredentialCaches OfflineCredentialCache[]
   createdAt               DateTime                @default(now())
   updatedAt               DateTime                @updatedAt
 
   @@index([walletId, status])
+}
+
+model VoucherCredential {
+  id               String                @id @default(cuid())
+  voucherId        String
+  voucher          Voucher               @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  kind             CredentialKind
+  label            String?
+  secretClass      CredentialSecretClass @default(CONFIDENTIAL)
+  encryptedValue   String
+  valueFingerprint String
+  maskedValue      String
+  revealCount      Int                   @default(0)
+  lastRevealedAt   DateTime?
+  revokedAt        DateTime?
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  offlineCaches    OfflineCredentialCache[]
+
+  @@unique([voucherId, valueFingerprint])
+  @@index([voucherId, revokedAt])
+}
+
+model OfflineCredentialCache {
+  id               String             @id @default(cuid())
+  voucherId        String
+  voucher          Voucher            @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  credentialId     String
+  credential       VoucherCredential  @relation(fields: [credentialId], references: [id], onDelete: Cascade)
+  deviceId         String
+  device           UserDevice         @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  encryptedPayload String
+  payloadHash      String
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  createdAt        DateTime           @default(now())
+
+  @@unique([credentialId, deviceId])
+  @@index([deviceId, revokedAt, expiresAt])
+  @@index([voucherId, revokedAt])
 }
 
 model BenefitReservation {
