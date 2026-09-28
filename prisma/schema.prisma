@@ -122,6 +122,28 @@ enum CredentialSecretClass {
   RESTRICTED
 }
 
+enum DataExportFormat {
+  JSON
+  CSV
+  ZIP
+  PDF
+}
+
+enum DataExportStatus {
+  REQUESTED
+  READY
+  EXPIRED
+  FAILED
+}
+
+enum AccountDeletionStatus {
+  REQUESTED
+  BLOCKED_BY_WALLET_OWNERSHIP
+  SCHEDULED
+  CANCELLED
+  COMPLETED
+}
+
 enum BenefitActionType {
   ACCEPT_TRANSFER
   DECLINE_TRANSFER
@@ -170,7 +192,61 @@ model User {
   benefitTransfersReceived  BenefitTransfer[]        @relation("BenefitTransferRecipient")
   benefitAuditEvents        BenefitAuditEvent[]
   benefitActionItems        BenefitActionItem[]
+  dataExportRequests        DataExportRequest[]
+  backupProfiles            BackupProfile[]
+  accountDeletionRequests   AccountDeletionRequest[]
   createdAt                 DateTime                 @default(now())
+}
+
+model DataExportRequest {
+  id                    String           @id @default(cuid())
+  userId                String
+  user                  User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  format                DataExportFormat @default(JSON)
+  includeSensitiveData  Boolean          @default(false)
+  includeAuditData      Boolean          @default(true)
+  includeAttachments    Boolean          @default(false)
+  status                DataExportStatus @default(REQUESTED)
+  manifest              Json?
+  checksum              String?
+  downloadTokenHash     String?          @unique
+  downloadExpiresAt     DateTime?
+  completedAt           DateTime?
+  createdAt             DateTime         @default(now())
+
+  @@index([userId, status, createdAt])
+}
+
+model BackupProfile {
+  id                    String           @id @default(cuid())
+  userId                String
+  user                  User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name                  String
+  format                DataExportFormat @default(JSON)
+  includeSensitiveData  Boolean          @default(false)
+  includeAuditData      Boolean          @default(true)
+  retentionDays         Int              @default(30)
+  enabled               Boolean          @default(true)
+  lastSnapshotAt        DateTime?
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+
+  @@unique([userId, name])
+  @@index([userId, enabled])
+}
+
+model AccountDeletionRequest {
+  id           String                @id @default(cuid())
+  userId       String
+  user         User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status       AccountDeletionStatus @default(REQUESTED)
+  executeAfter DateTime?
+  reason       String?
+  createdAt    DateTime              @default(now())
+  cancelledAt  DateTime?
+  completedAt  DateTime?
+
+  @@index([userId, status])
 }
 
 model NotificationPreference {
