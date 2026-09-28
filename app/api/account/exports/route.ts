@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireUserId } from '@/lib/request-user';
-import { completeDataExport, requestDataExport } from '@/lib/data-portability-repository';
+import { completeDataExport, downloadDataExport, requestDataExport } from '@/lib/data-portability-repository';
+
+export async function GET(request: Request) {
+  try { const userId = await requireUserId(request); const token = new URL(request.url).searchParams.get('token'); if (!token) throw new Error('Download-Token fehlt.'); return NextResponse.json(await downloadDataExport(userId, token)); }
+  catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : 'Export steht nicht bereit.' }, { status: 400 }); }
+}
 
 export async function POST(request: Request) {
   try {

@@ -24,3 +24,18 @@ export function validateRestoreManifest(value: unknown) {
 export function assertNoOwnedFamilyWallet(ownedWalletCount: number) {
   if (ownedWalletCount > 0) throw new Error('Kontolöschung ist blockiert: Eigentum an einer Family Wallet muss zuvor übertragen oder beendet werden.');
 }
+
+export function redactVoucherForExport(voucher: Record<string, unknown>, includeSensitiveData: boolean) {
+  const { code, barcode, qrPayload, credentials, ...safe } = voucher;
+  if (includeSensitiveData) return { ...safe, code, barcode, qrPayload, credentials };
+  return { ...safe, credentials: Array.isArray(credentials) ? credentials.map(item => {
+    const credential = item as Record<string, unknown>;
+    const { encryptedValue, valueFingerprint, ...masked } = credential;
+    return masked;
+  }) : undefined };
+}
+
+export function classifyRestoreCandidate(candidate: { merchantName?: string; title?: string }, existing: Array<{ merchantName: string; title: string }>) {
+  const duplicate = existing.some(item => item.merchantName.trim().toLowerCase() === candidate.merchantName?.trim().toLowerCase() && item.title.trim().toLowerCase() === candidate.title?.trim().toLowerCase());
+  return duplicate ? 'DUPLICATE_REVIEW_REQUIRED' : 'CREATE_REVIEW_REQUIRED';
+}

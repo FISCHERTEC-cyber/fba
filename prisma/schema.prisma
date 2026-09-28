@@ -208,6 +208,7 @@ model DataExportRequest {
   includeAttachments    Boolean          @default(false)
   status                DataExportStatus @default(REQUESTED)
   manifest              Json?
+  payload               Json?
   checksum              String?
   downloadTokenHash     String?          @unique
   downloadExpiresAt     DateTime?
