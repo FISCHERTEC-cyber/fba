@@ -17,5 +17,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Audit production and development lockfile dependencies
+      - name: Audit production dependencies (release blocker)
+        run: npm audit --omit=dev --audit-level=high
+      - name: Audit all locked dependencies (including build and dev)
+        if: always()
         run: npm audit --audit-level=high
