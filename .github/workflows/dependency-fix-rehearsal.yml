@@ -41,6 +41,13 @@ jobs:
         run: npx tsc --noEmit
       - name: Security audit (fail closed)
         run: npm audit --audit-level=high
+      - name: Emit validated candidate package files as text for reviewed commit
+        run: |
+          for file in candidate-package.json candidate-package-lock.json; do
+            echo "FBA_CANDIDATE_BEGIN:$file"
+            base64 -w0 "$file" | fold -w 4000
+            echo "FBA_CANDIDATE_END:$file"
+          done
       - name: Archive candidate for isolated review
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
