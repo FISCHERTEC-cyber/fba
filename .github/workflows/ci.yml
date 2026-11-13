@@ -50,3 +50,37 @@ jobs:
         env:
           SECURITY_REQUIRE_COMPLETE_HISTORY: '1'
         run: python3 scripts/secret_history_scan.py
+
+  db-authorization-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: fba_ci
+          POSTGRES_PASSWORD: fba_ci_only
+          POSTGRES_DB: fba_ci_isolated
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U fba_ci -d fba_ci_isolated"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+    env:
+      DATABASE_URL: postgresql://fba_ci:fba_ci_only@localhost:5432/fba_ci_isolated?schema=public
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install exact locked dependencies
+        run: npm ci
+      - name: Apply real Prisma migrations to fresh ephemeral PostgreSQL
+        run: npx prisma migrate deploy
+      - name: Prove user/wallet isolation, rejected writes, invitation rollback and session invalidation
+        run: npm exec --yes --package=tsx@4.20.6 -- tsx --test tests/database-authorization.integration.test.ts
