@@ -48,5 +48,5 @@ jobs:
         run: python3 scripts/secret_pattern_scan.py
       - name: Scan complete fetched Git history
         env:
-          FWA_REQUIRE_COMPLETE_HISTORY: '1'
+          SECURITY_REQUIRE_COMPLETE_HISTORY: '1'
         run: python3 scripts/secret_history_scan.py
