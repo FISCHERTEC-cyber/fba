@@ -23,7 +23,7 @@ def git(*args: str, input_data: bytes | None = None) -> bytes:
 
 
 def scan_history() -> bool:
-    if os.environ.get("FWA_REQUIRE_COMPLETE_HISTORY") == "1":
+    if os.environ.get("SECURITY_REQUIRE_COMPLETE_HISTORY") == "1":
         if git("rev-parse", "--is-shallow-repository").strip() != b"false":
             raise RuntimeError("incomplete shallow repository history")
         if not git("for-each-ref", "--format=%(refname)", "refs/remotes/origin").strip():
