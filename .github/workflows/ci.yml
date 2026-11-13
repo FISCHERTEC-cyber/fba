@@ -83,4 +83,4 @@ jobs:
       - name: Apply real Prisma migrations to fresh ephemeral PostgreSQL
         run: npx prisma migrate deploy
       - name: Prove user/wallet isolation, rejected writes, invitation rollback and session invalidation
-        run: npm exec --yes --package=tsx@4.20.6 -- tsx --test tests/database-authorization.integration.test.ts
+        run: npm exec --yes --package=tsx@4.20.6 -- tsx --test tests/integration/database-authorization.test.ts
