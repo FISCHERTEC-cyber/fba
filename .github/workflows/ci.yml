@@ -36,3 +36,17 @@ jobs:
           cache: npm
       - name: Audit all locked production and development dependencies
         run: npm audit --audit-level=high
+
+  secret-patterns:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Scan tracked index for high-confidence tokens
+        run: python3 scripts/secret_pattern_scan.py
+      - name: Scan complete fetched Git history
+        env:
+          FWA_REQUIRE_COMPLETE_HISTORY: '1'
+        run: python3 scripts/secret_history_scan.py
