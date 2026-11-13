@@ -24,7 +24,7 @@ export const voucherExtractionSchema = z.object({
   sourceReference: z.string().optional(),
   confidence: z.object({
     overall: z.number().min(0).max(1),
-    fields: z.record(z.number().min(0).max(1)).default({})
+    fields: z.record(z.string(), z.number().min(0).max(1)).default({})
   })
 });
 
