@@ -22,7 +22,8 @@ test('background job endpoints reject absent, wrong, and malformed bearer values
     process.env.NOTIFICATION_JOB_TOKEN = 'ci-high-entropy-test-token-not-a-real-secret';
     const url = 'https://fba.example.test/api/jobs/notifications';
     for (const auth of ['', 'Bearer incorrect', 'Basic ci-high-entropy-test-token-not-a-real-secret']) {
-      const headers = auth ? {authorization:auth} : {};
+      const headers = new Headers();
+      if (auth) headers.set('authorization',auth);
       assert.throws(() => requireNotificationJobToken(new Request(url,{headers})),
         /Nicht autorisierter Aufruf/);
     }
