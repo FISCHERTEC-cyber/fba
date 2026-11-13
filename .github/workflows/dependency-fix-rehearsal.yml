@@ -1,6 +1,8 @@
-name: Compatible dependency remediation rehearsal
+name: FBA major-upgrade isolated security rehearsal
 on:
   pull_request:
+    paths:
+      - .github/workflows/dependency-fix-rehearsal.yml
   workflow_dispatch:
 permissions:
   contents: read
@@ -16,32 +18,36 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-      - name: Apply only semver-compatible fixes to disposable runner lockfile
-        shell: bash
+      - name: Prepare isolated major-upgrade candidate
         run: |
-          set +e
-          npm audit fix --package-lock-only > audit-fix-output.txt 2>&1
-          rc=$?
-          set -e
-          printf 'audit_fix_exit=%s\n' "$rc" | tee candidate-status.txt
-          cat audit-fix-output.txt
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          const p=JSON.parse(fs.readFileSync('package.json','utf8'));
+          p.dependencies.next='16.4.6';
+          p.dependencies.zod='4.6.7';
+          p.overrides={...(p.overrides||{}),'deepmerge-ts':'^8.0.0','postcss':'^8.5.32'};
+          fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n');
+          JS
+          npm install --package-lock-only --ignore-scripts --no-audit
+          cp package.json candidate-package.json
           cp package-lock.json candidate-package-lock.json
-      - name: Install and verify resulting dependency graph
+      - name: Install and verify lockfile candidate
         run: npm ci
       - name: Regression tests
         run: npm test
-      - name: Additional project regression
+      - name: Build
         run: npm run build
-      - name: Re-audit candidate, fail on HIGH/CRITICAL
+      - name: Typecheck
+        run: npx tsc --noEmit
+      - name: Security audit (fail closed)
         run: npm audit --audit-level=high
-      - name: Archive lockfile candidate even if unresolved findings remain
+      - name: Archive candidate for isolated review
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: compatible-lock-candidate
+          name: fba-major-candidate
           path: |
+            candidate-package.json
             candidate-package-lock.json
-            candidate-status.txt
-            audit-fix-output.txt
           if-no-files-found: warn
           retention-days: 7
