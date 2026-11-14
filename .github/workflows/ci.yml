@@ -84,3 +84,20 @@ jobs:
         run: npx prisma migrate deploy
       - name: Prove user/wallet isolation, rejected writes, invitation rollback and session invalidation
         run: npm exec --yes --package=tsx@4.20.6 -- tsx --test tests/integration/database-authorization.test.ts
+      - name: Test migration upgrade with existing synthetic data
+        env:
+          UPGRADE_DATABASE_URL: postgresql://fba_ci:fba_ci_only@localhost:5432/fba_ci_upgrade?schema=public
+          PG_CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          set -euo pipefail
+          docker exec "$PG_CONTAINER" createdb -U fba_ci fba_ci_upgrade
+          docker exec -i "$PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U fba_ci -d fba_ci_upgrade < prisma/migrations/20260904193000_init/migration.sql
+          docker exec -i "$PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U fba_ci -d fba_ci_upgrade <<'SQL'
+          INSERT INTO "User" ("id", "email") VALUES ('upgrade-user', 'upgrade@example.invalid');
+          INSERT INTO "Voucher" ("id", "userId", "merchantName", "title", "kind", "updatedAt")
+          VALUES ('upgrade-voucher', 'upgrade-user', 'fixture', 'existing voucher', 'VALUE', CURRENT_TIMESTAMP);
+          SQL
+          DATABASE_URL="$UPGRADE_DATABASE_URL" npx prisma migrate resolve --applied 20260904193000_init
+          DATABASE_URL="$UPGRADE_DATABASE_URL" npx prisma migrate deploy
+          result=$(docker exec "$PG_CONTAINER" psql -At -U fba_ci -d fba_ci_upgrade -c 'SELECT "userId" || chr(124) || "title" FROM "Voucher" WHERE id = '\''upgrade-voucher'\''')
+          test "$result" = 'upgrade-user|existing voucher'
