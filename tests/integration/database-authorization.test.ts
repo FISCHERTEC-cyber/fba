@@ -148,3 +148,15 @@ test('API routes enforce session and owner access before returning or changing v
   const revoked = await getVoucherRoute(request(cookie(owner.sessionToken)), context);
   assert.notEqual(revoked.status, 200);
 });
+
+test('a different Supabase subject cannot claim an already linked email', async () => {
+  const email = `subject-conflict-${suffix}@example.invalid`;
+  const original = await createUserSession({supabaseUserId:`subject-one-${suffix}`, email});
+  await assert.rejects(
+    createUserSession({supabaseUserId:`subject-two-${suffix}`, email}),
+    /Identität|Identitaet/,
+  );
+  const user = await prisma.user.findUniqueOrThrow({where:{id:original.userId}});
+  assert.equal(user.supabaseUserId, `subject-one-${suffix}`);
+  assert.equal(await resolveSessionUser(original.sessionToken), original.userId);
+});
