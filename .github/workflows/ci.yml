@@ -120,13 +120,43 @@ jobs:
           DATABASE_URL="$RECOVERY_DATABASE_URL" npx prisma migrate resolve --schema "$temp_prisma/schema.prisma" --applied 20260904193000_init
           migration="$temp_prisma/migrations/20260904200000_notifications/migration.sql"
           cp "$migration" "$temp_prisma/original.sql"
-          { printf 'SELECT 1 / 0;\n'; cat "$temp_prisma/original.sql"; } > "$migration"
+          { printf 'CREATE TABLE recovery_partial_fixture (id integer);\nSELECT 1 / 0;\n'; cat "$temp_prisma/original.sql"; } > "$migration"
           if DATABASE_URL="$RECOVERY_DATABASE_URL" npx prisma migrate deploy --schema "$temp_prisma/schema.prisma"; then
             echo 'Expected injected migration failure' >&2
             exit 1
           fi
+          partial=$(docker exec "$PG_CONTAINER" psql -At -U fba_ci -d fba_ci_recovery -c "SELECT to_regclass('public.recovery_partial_fixture') IS NOT NULL")
+          test "$partial" = 't'
+          docker exec "$PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U fba_ci -d fba_ci_recovery -c 'DROP TABLE recovery_partial_fixture'
           DATABASE_URL="$RECOVERY_DATABASE_URL" npx prisma migrate resolve --schema "$temp_prisma/schema.prisma" --rolled-back 20260904200000_notifications
           cp "$temp_prisma/original.sql" "$migration"
           DATABASE_URL="$RECOVERY_DATABASE_URL" npx prisma migrate deploy --schema "$temp_prisma/schema.prisma"
           result=$(docker exec "$PG_CONTAINER" psql -At -U fba_ci -d fba_ci_recovery -c 'SELECT "userId" || chr(124) || "title" FROM "Voucher" WHERE id = '\''recovery-voucher'\''')
           test "$result" = 'recovery-user|preserve during recovery'
+      - name: Restore isolated recovery database and validate integrity
+        env:
+          PG_CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          set -euo pipefail
+          dump=$(mktemp)
+          trap 'rm -f "$dump"' EXIT
+          docker exec "$PG_CONTAINER" pg_dump -U fba_ci --no-owner --no-privileges fba_ci_recovery > "$dump"
+          docker exec "$PG_CONTAINER" createdb -U fba_ci fba_ci_restore
+          docker exec -i "$PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U fba_ci -d fba_ci_restore < "$dump"
+          docker exec -i "$PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U fba_ci -d fba_ci_restore <<'SQL'
+          DO $$
+          BEGIN
+            IF NOT EXISTS (SELECT 1 FROM "Voucher" WHERE id='recovery-voucher' AND "userId"='recovery-user') THEN
+              RAISE EXCEPTION 'restored synthetic voucher missing';
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='Voucher_userId_fkey' AND convalidated) THEN
+              RAISE EXCEPTION 'restored foreign key missing or invalid';
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname='public' AND indexname='User_email_key') THEN
+              RAISE EXCEPTION 'restored unique index missing';
+            END IF;
+            IF NOT has_table_privilege(current_user, '"Voucher"', 'SELECT, INSERT, UPDATE, DELETE') THEN
+              RAISE EXCEPTION 'restore owner lacks required permissions';
+            END IF;
+          END $$;
+          SQL
