@@ -160,3 +160,16 @@ test('a different Supabase subject cannot claim an already linked email', async 
   assert.equal(user.supabaseUserId, `subject-one-${suffix}`);
   assert.equal(await resolveSessionUser(original.sessionToken), original.userId);
 });
+
+test('existing unlinked accounts and a stable subject retain their user identity', async () => {
+  const email = `legacy-${suffix}@example.invalid`;
+  const subject = `legacy-subject-${suffix}`;
+  const old = await prisma.user.create({data:{email}});
+  const first = await createUserSession({supabaseUserId:subject, email});
+  assert.equal(first.userId, old.id);
+  await revokeSession(first.sessionToken);
+  const changedEmail = `changed-${suffix}@example.invalid`;
+  const second = await createUserSession({supabaseUserId:subject, email:changedEmail});
+  assert.equal(second.userId, old.id);
+  assert.equal((await prisma.user.findUniqueOrThrow({where:{id:old.id}})).email, changedEmail);
+});
