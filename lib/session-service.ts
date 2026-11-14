@@ -16,6 +16,9 @@ export async function createUserSession(input: {
     const existingUser = await tx.user.findFirst({
       where: { OR: [{ supabaseUserId: input.supabaseUserId }, { email: input.email }] }
     });
+    if (existingUser?.supabaseUserId && existingUser.supabaseUserId !== input.supabaseUserId) {
+      throw new Error('Die Identität stimmt nicht mit dem verknüpften Konto überein.');
+    }
     const user = existingUser
       ? await tx.user.update({ where: { id: existingUser.id }, data: { supabaseUserId: input.supabaseUserId, email: input.email } })
       : await tx.user.create({ data: { supabaseUserId: input.supabaseUserId, email: input.email } });
