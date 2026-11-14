@@ -16,6 +16,12 @@ export async function createUserSession(input: {
     const existingUser = await tx.user.findFirst({
       where: { OR: [{ supabaseUserId: input.supabaseUserId }, { email: input.email }] }
     });
+    if (existingUser && !existingUser.supabaseUserId) {
+      throw new Error('Dieses bestehende Konto muss vor der Anmeldung sicher verknüpft werden.');
+    }
+    if (existingUser?.supabaseUserId && existingUser.supabaseUserId !== input.supabaseUserId) {
+      throw new Error('Die Identität stimmt nicht mit dem verknüpften Konto überein.');
+    }
     const user = existingUser
       ? await tx.user.update({ where: { id: existingUser.id }, data: { supabaseUserId: input.supabaseUserId, email: input.email } })
       : await tx.user.create({ data: { supabaseUserId: input.supabaseUserId, email: input.email } });
@@ -38,15 +44,27 @@ export async function createUserSession(input: {
   return { ...result, deviceToken, sessionToken, expiresAt };
 }
 
-export async function resolveSessionUser(sessionToken: string, now = new Date()) {
-  const session = await prisma.userSession.findUnique({ where: { tokenHash: tokenHash(sessionToken) } });
-  if (!session || session.revokedAt || session.expiresAt <= now) throw new Error('Anmeldung erforderlich.');
-  const expiresAt = new Date(now.getTime() + SESSION_LEASE_MS);
-  await prisma.$transaction([
-    prisma.userSession.update({ where: { id: session.id }, data: { lastSeenAt: now, expiresAt } }),
-    prisma.userDevice.update({ where: { id: session.deviceId }, data: { lastSeenAt: now } })
-  ]);
-  return session.userId;
+export async function resolveSessionUser(sessionToken: string, now?: Date) {
+  const hash = tokenHash(sessionToken);
+  return prisma.$transaction(async tx => {
+    // Lock before evaluating expiry so a request waiting on a concurrent
+    // revocation cannot renew a session that expired while it was blocked.
+    const rows = await tx.$queryRaw<Array<{id: string}>>`SELECT "id" FROM "UserSession" WHERE "tokenHash" = ${hash} FOR UPDATE`;
+    if (rows.length !== 1) throw new Error('Anmeldung erforderlich.');
+    const checkedAt = now ?? new Date();
+    const updated = await tx.userSession.updateMany({
+      where: { id: rows[0].id, revokedAt: null, expiresAt: { gt: checkedAt } },
+      data: { lastSeenAt: checkedAt, expiresAt: new Date(checkedAt.getTime() + SESSION_LEASE_MS) }
+    });
+    if (updated.count !== 1) throw new Error('Anmeldung erforderlich.');
+    const session = await tx.userSession.findUniqueOrThrow({ where: { id: rows[0].id } });
+    const device = await tx.userDevice.updateMany({
+      where: { id: session.deviceId, revokedAt: null },
+      data: { lastSeenAt: checkedAt }
+    });
+    if (device.count !== 1) throw new Error('Anmeldung erforderlich.');
+    return session.userId;
+  });
 }
 
 export async function revokeSession(sessionToken?: string, now = new Date()) {
