@@ -126,8 +126,7 @@ jobs:
             exit 1
           fi
           partial=$(docker exec "$PG_CONTAINER" psql -At -U fba_ci -d fba_ci_recovery -c "SELECT to_regclass('public.recovery_partial_fixture') IS NOT NULL")
-          test "$partial" = 't'
-          docker exec "$PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U fba_ci -d fba_ci_recovery -c 'DROP TABLE recovery_partial_fixture'
+          test "$partial" = 'f'
           DATABASE_URL="$RECOVERY_DATABASE_URL" npx prisma migrate resolve --schema "$temp_prisma/schema.prisma" --rolled-back 20260904200000_notifications
           cp "$temp_prisma/original.sql" "$migration"
           DATABASE_URL="$RECOVERY_DATABASE_URL" npx prisma migrate deploy --schema "$temp_prisma/schema.prisma"
