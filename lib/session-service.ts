@@ -44,20 +44,23 @@ export async function createUserSession(input: {
   return { ...result, deviceToken, sessionToken, expiresAt };
 }
 
-export async function resolveSessionUser(sessionToken: string, now = new Date()) {
+export async function resolveSessionUser(sessionToken: string, now?: Date) {
   const hash = tokenHash(sessionToken);
   return prisma.$transaction(async tx => {
-    // Conditional UPDATE locks the session row and rechecks revocation after
-    // any concurrent revocation has committed.
+    // Lock before evaluating expiry so a request waiting on a concurrent
+    // revocation cannot renew a session that expired while it was blocked.
+    const rows = await tx.$queryRaw<Array<{id: string}>>`SELECT "id" FROM "UserSession" WHERE "tokenHash" = ${hash} FOR UPDATE`;
+    if (rows.length !== 1) throw new Error('Anmeldung erforderlich.');
+    const checkedAt = now ?? new Date();
     const updated = await tx.userSession.updateMany({
-      where: { tokenHash: hash, revokedAt: null, expiresAt: { gt: now } },
-      data: { lastSeenAt: now, expiresAt: new Date(now.getTime() + SESSION_LEASE_MS) }
+      where: { id: rows[0].id, revokedAt: null, expiresAt: { gt: checkedAt } },
+      data: { lastSeenAt: checkedAt, expiresAt: new Date(checkedAt.getTime() + SESSION_LEASE_MS) }
     });
     if (updated.count !== 1) throw new Error('Anmeldung erforderlich.');
-    const session = await tx.userSession.findUniqueOrThrow({ where: { tokenHash: hash } });
+    const session = await tx.userSession.findUniqueOrThrow({ where: { id: rows[0].id } });
     const device = await tx.userDevice.updateMany({
       where: { id: session.deviceId, revokedAt: null },
-      data: { lastSeenAt: now }
+      data: { lastSeenAt: checkedAt }
     });
     if (device.count !== 1) throw new Error('Anmeldung erforderlich.');
     return session.userId;
