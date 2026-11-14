@@ -10,7 +10,7 @@ test('Supabase login uses provider response and rejects malformed and failed res
   try {
     process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://provider.example.invalid';
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'synthetic-test-key';
-    process.env.NODE_ENV = 'production';
+    Object.assign(process.env, {NODE_ENV:'production'});
     globalThis.fetch = async (input, init) => {
       assert.equal(String(input), 'https://provider.example.invalid/auth/v1/token?grant_type=password');
       assert.equal(init?.method, 'POST');
