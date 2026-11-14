@@ -16,6 +16,9 @@ export async function createUserSession(input: {
     const existingUser = await tx.user.findFirst({
       where: { OR: [{ supabaseUserId: input.supabaseUserId }, { email: input.email }] }
     });
+    if (existingUser && !existingUser.supabaseUserId) {
+      throw new Error('Dieses bestehende Konto muss vor der Anmeldung sicher verknüpft werden.');
+    }
     if (existingUser?.supabaseUserId && existingUser.supabaseUserId !== input.supabaseUserId) {
       throw new Error('Die Identität stimmt nicht mit dem verknüpften Konto überein.');
     }
