@@ -101,3 +101,32 @@ jobs:
           DATABASE_URL="$UPGRADE_DATABASE_URL" npx prisma migrate deploy
           result=$(docker exec "$PG_CONTAINER" psql -At -U fba_ci -d fba_ci_upgrade -c 'SELECT "userId" || chr(124) || "title" FROM "Voucher" WHERE id = '\''upgrade-voucher'\''')
           test "$result" = 'upgrade-user|existing voucher'
+      - name: Test failed migration recovery on isolated database
+        env:
+          PG_CONTAINER: ${{ job.services.postgres.id }}
+          RECOVERY_DATABASE_URL: postgresql://fba_ci:fba_ci_only@localhost:5432/fba_ci_recovery?schema=public
+        run: |
+          set -euo pipefail
+          docker exec "$PG_CONTAINER" createdb -U fba_ci fba_ci_recovery
+          docker exec -i "$PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U fba_ci -d fba_ci_recovery < prisma/migrations/20260904193000_init/migration.sql
+          docker exec -i "$PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U fba_ci -d fba_ci_recovery <<'SQL'
+          INSERT INTO "User" ("id", "email") VALUES ('recovery-user', 'recovery@example.invalid');
+          INSERT INTO "Voucher" ("id", "userId", "merchantName", "title", "kind", "updatedAt")
+          VALUES ('recovery-voucher', 'recovery-user', 'fixture', 'preserve during recovery', 'VALUE', CURRENT_TIMESTAMP);
+          SQL
+          temp_prisma=$(mktemp -d)
+          trap 'rm -rf "$temp_prisma"' EXIT
+          cp -R prisma/. "$temp_prisma/"
+          DATABASE_URL="$RECOVERY_DATABASE_URL" npx prisma migrate resolve --schema "$temp_prisma/schema.prisma" --applied 20260904193000_init
+          migration="$temp_prisma/migrations/20260904200000_notifications/migration.sql"
+          cp "$migration" "$temp_prisma/original.sql"
+          { printf 'SELECT 1 / 0;\n'; cat "$temp_prisma/original.sql"; } > "$migration"
+          if DATABASE_URL="$RECOVERY_DATABASE_URL" npx prisma migrate deploy --schema "$temp_prisma/schema.prisma"; then
+            echo 'Expected injected migration failure' >&2
+            exit 1
+          fi
+          DATABASE_URL="$RECOVERY_DATABASE_URL" npx prisma migrate resolve --schema "$temp_prisma/schema.prisma" --rolled-back 20260904200000_notifications
+          cp "$temp_prisma/original.sql" "$migration"
+          DATABASE_URL="$RECOVERY_DATABASE_URL" npx prisma migrate deploy --schema "$temp_prisma/schema.prisma"
+          result=$(docker exec "$PG_CONTAINER" psql -At -U fba_ci -d fba_ci_recovery -c 'SELECT "userId" || chr(124) || "title" FROM "Voucher" WHERE id = '\''recovery-voucher'\''')
+          test "$result" = 'recovery-user|preserve during recovery'
