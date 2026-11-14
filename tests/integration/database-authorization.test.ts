@@ -11,6 +11,8 @@ import {
 } from '../../lib/family-wallet-repository';
 import { createUserSession, resolveSessionUser, revokeSession } from '../../lib/session-service';
 import { getVoucherDetail } from '../../lib/voucher-repository';
+import { GET as getVoucherRoute } from '../../app/api/vouchers/[id]/route';
+import { POST as assignVoucherRoute } from '../../app/api/wallets/[id]/vouchers/route';
 
 const url = process.env.DATABASE_URL || '';
 if (!url.includes('localhost:5432/fba_ci_isolated')) {
@@ -113,4 +115,36 @@ test('database transaction rolls back writes after an exception', async () => {
     throw new Error('forced rollback');
   }), /forced rollback/);
   assert.equal(await prisma.user.count({where:{email}}), 0);
+});
+
+test('API routes enforce session and owner access before returning or changing voucher data', async () => {
+  const owner = await createUserSession({supabaseUserId:`route-owner-${suffix}`,
+    email:`route-owner-${suffix}@example.invalid`});
+  const outsider = await createUserSession({supabaseUserId:`route-outsider-${suffix}`,
+    email:`route-outsider-${suffix}@example.invalid`});
+  const voucher = await prisma.voucher.create({data:{
+    userId:owner.userId, merchantName:'CI fixture', title:'owner-only fixture', kind:'VALUE',
+  }});
+  const wallet = await createFamilyWallet(outsider.userId, 'Foreign wallet');
+  const cookie = (token: string) => ({cookie:`fba_session=${token}`});
+  const context = {params:Promise.resolve({id:voucher.id})};
+  const request = (headers?: Record<string,string>) =>
+    new Request('https://fba.example.test/api/vouchers/test', {headers});
+  const ownerResponse = await getVoucherRoute(request(cookie(owner.sessionToken)), context);
+  assert.equal(ownerResponse.status, 200);
+  assert.equal((await ownerResponse.json()).voucher.id, voucher.id);
+  const unauthenticated = await getVoucherRoute(request(), context);
+  assert.notEqual(unauthenticated.status, 200);
+  const foreignResponse = await getVoucherRoute(request(cookie(outsider.sessionToken)), context);
+  assert.notEqual(foreignResponse.status, 200);
+  assert.equal((await foreignResponse.text()).includes('owner-only fixture'), false);
+  const assignResponse = await assignVoucherRoute(new Request('https://fba.example.test/api/wallets/test/vouchers', {
+    method:'POST', headers:{...cookie(outsider.sessionToken), 'content-type':'application/json'},
+    body:JSON.stringify({voucherId:voucher.id}),
+  }), {params:Promise.resolve({id:wallet.id})});
+  assert.notEqual(assignResponse.status, 200);
+  assert.equal((await prisma.voucher.findUniqueOrThrow({where:{id:voucher.id}})).walletId, null);
+  await revokeSession(owner.sessionToken);
+  const revoked = await getVoucherRoute(request(cookie(owner.sessionToken)), context);
+  assert.notEqual(revoked.status, 200);
 });
