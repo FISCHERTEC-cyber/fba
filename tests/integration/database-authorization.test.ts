@@ -10,6 +10,7 @@ import {
   listFamilyWallets,
 } from '../../lib/family-wallet-repository';
 import { createUserSession, resolveSessionUser, revokeSession } from '../../lib/session-service';
+import { getVoucherDetail } from '../../lib/voucher-repository';
 
 const url = process.env.DATABASE_URL || '';
 if (!url.includes('localhost:5432/fba_ci_isolated')) {
@@ -89,4 +90,27 @@ test('isolated PostgreSQL: session cannot be reused after revocation or expiry',
     resolveSessionUser(fresh.sessionToken, new Date(fresh.expiresAt.getTime()+1)),
     /Anmeldung erforderlich/,
   );
+});
+
+test('foreign voucher cannot be read or assigned to another user wallet', async () => {
+  const owner = await prisma.user.create({data:{email:`object-owner-${suffix}@example.invalid`}});
+  const outsider = await prisma.user.create({data:{email:`object-outsider-${suffix}@example.invalid`}});
+  const voucher = await prisma.voucher.create({data:{
+    userId: owner.id, merchantName:'CI fixture', title:'Private voucher', kind:'VALUE',
+  }});
+  const foreignWallet = await createFamilyWallet(outsider.id, 'Outsider wallet');
+  assert.equal((await getVoucherDetail(owner.id, voucher.id)).id, voucher.id);
+  await assert.rejects(getVoucherDetail(outsider.id, voucher.id), /nicht gefunden/);
+  await assert.rejects(assignVoucherToFamilyWallet(outsider.id, foreignWallet.id, voucher.id),
+    /Nur eigene Gutscheine/);
+  assert.equal((await prisma.voucher.findUniqueOrThrow({where:{id:voucher.id}})).walletId, null);
+});
+
+test('database transaction rolls back writes after an exception', async () => {
+  const email = `rollback-${suffix}@example.invalid`;
+  await assert.rejects(prisma.$transaction(async tx => {
+    await tx.user.create({data:{email}});
+    throw new Error('forced rollback');
+  }), /forced rollback/);
+  assert.equal(await prisma.user.count({where:{email}}), 0);
 });
