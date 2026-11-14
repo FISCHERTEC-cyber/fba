@@ -45,14 +45,23 @@ export async function createUserSession(input: {
 }
 
 export async function resolveSessionUser(sessionToken: string, now = new Date()) {
-  const session = await prisma.userSession.findUnique({ where: { tokenHash: tokenHash(sessionToken) } });
-  if (!session || session.revokedAt || session.expiresAt <= now) throw new Error('Anmeldung erforderlich.');
-  const expiresAt = new Date(now.getTime() + SESSION_LEASE_MS);
-  await prisma.$transaction([
-    prisma.userSession.update({ where: { id: session.id }, data: { lastSeenAt: now, expiresAt } }),
-    prisma.userDevice.update({ where: { id: session.deviceId }, data: { lastSeenAt: now } })
-  ]);
-  return session.userId;
+  const hash = tokenHash(sessionToken);
+  return prisma.$transaction(async tx => {
+    // Conditional UPDATE locks the session row and rechecks revocation after
+    // any concurrent revocation has committed.
+    const updated = await tx.userSession.updateMany({
+      where: { tokenHash: hash, revokedAt: null, expiresAt: { gt: now } },
+      data: { lastSeenAt: now, expiresAt: new Date(now.getTime() + SESSION_LEASE_MS) }
+    });
+    if (updated.count !== 1) throw new Error('Anmeldung erforderlich.');
+    const session = await tx.userSession.findUniqueOrThrow({ where: { tokenHash: hash } });
+    const device = await tx.userDevice.updateMany({
+      where: { id: session.deviceId, revokedAt: null },
+      data: { lastSeenAt: now }
+    });
+    if (device.count !== 1) throw new Error('Anmeldung erforderlich.');
+    return session.userId;
+  });
 }
 
 export async function revokeSession(sessionToken?: string, now = new Date()) {
