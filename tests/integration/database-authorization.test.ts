@@ -221,3 +221,25 @@ test('concurrent renewal and device revocation cannot revive a revoked device', 
   const saved = await prisma.userSession.findUniqueOrThrow({where:{tokenHash:tokenHash(session.sessionToken)}});
   assert.notEqual(saved.revokedAt, null);
 });
+
+test('renewal waiting for a session lock rejects an expiry committed while waiting', async () => {
+  const session = await createUserSession({supabaseUserId:`expiry-race-${suffix}`, email:`expiry-race-${suffix}@example.invalid`});
+  let release!: () => void;
+  let locked!: () => void;
+  const acquired = new Promise<void>(r => { locked = r; });
+  const gate = new Promise<void>(r => { release = r; });
+  const expire = prisma.$transaction(async tx => {
+    await tx.userSession.updateMany({where:{tokenHash:tokenHash(session.sessionToken)},
+      data:{expiresAt:new Date(Date.now() - 60000)}});
+    locked();
+    await gate;
+  }, {timeout:10000});
+  await acquired;
+  const resolution = resolveSessionUser(session.sessionToken).then(
+    value => ({ok:true as const,value}), error => ({ok:false as const,error})
+  );
+  release();
+  await expire;
+  const outcome = await resolution;
+  assert.equal(outcome.ok, false);
+});
